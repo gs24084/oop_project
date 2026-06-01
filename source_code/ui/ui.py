@@ -1,10 +1,6 @@
-# source-code/ui/ui.py
-
-import tempfile
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QApplication,
     QMainWindow,
     QWidget,
     QPlainTextEdit,
@@ -15,15 +11,34 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QSplitter,
-    QTabWidget,
     QFrame,
     QToolBar,
     QStatusBar,
-    QDialog,
 )
-from PySide6.QtCore import Qt, QPoint, QTimer
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import Qt
 
+from source_code.ui.console import ConsoleBox
+from source_code.ui.detachable_tab import DetachableTabWidget
+from source_code.ui.panels import (
+    create_testcase_tab,
+    create_graph_tab,
+    create_complexity_tab,
+    create_template_tab,
+)
+from source_code.ui.cpp_templates import (
+    default_cpp_code,
+    graph_cpp_code,
+    dp_cpp_code,
+)
+from source_code.ui.ui_styles import (
+    window_style,
+    panel_style,
+    title_style,
+    tab_style,
+    editor_style,
+    console_style,
+    toolbar_style,
+)
 
 try:
     from source_code.src.core.execution_manager import ExecutionManager
@@ -47,289 +62,6 @@ except Exception:
             }
 
 
-class FloatingTabWindow(QDialog):
-    def __init__(self, source_tab_widget, content_widget, title, original_index, parent_window):
-        super().__init__(parent_window)
-
-        self.source_tab_widget = source_tab_widget
-        self.content_widget = content_widget
-        self.title = title
-        self.original_index = original_index
-        self.parent_window = parent_window
-
-        self.dragging = False
-        self.drag_offset = QPoint(40, 18)
-        self.attached = False
-
-        self.follow_timer = QTimer(self)
-        self.follow_timer.timeout.connect(self.follow_mouse)
-
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
-        self.resize(520, 360)
-
-        self.header = QLabel(title + "    원래 탭 위치로 드래그하거나 더블클릭하면 다시 붙습니다")
-        self.header.setFixedHeight(32)
-        self.header.setStyleSheet("""
-            QLabel {
-                background-color: #f1f2f4;
-                border: 1px solid #d0d0d0;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                padding-left: 10px;
-                font-weight: bold;
-            }
-        """)
-
-        self.header.mousePressEvent = self.header_mouse_press
-        self.header.mouseMoveEvent = self.header_mouse_move
-        self.header.mouseReleaseEvent = self.header_mouse_release
-        self.header.mouseDoubleClickEvent = self.header_mouse_double_click
-
-        self.container = QFrame()
-        self.container.setStyleSheet("""
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #dddddd;
-                border-bottom-left-radius: 8px;
-                border-bottom-right-radius: 8px;
-            }
-        """)
-
-        self.inner_layout = QVBoxLayout()
-        self.inner_layout.setContentsMargins(8, 8, 8, 8)
-
-        self.content_widget.setParent(self.container)
-        self.inner_layout.addWidget(self.content_widget)
-        self.content_widget.setVisible(True)
-
-        self.container.setLayout(self.inner_layout)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.header)
-        layout.addWidget(self.container)
-        self.setLayout(layout)
-
-    def start_follow_mouse(self):
-        self.dragging = True
-        self.follow_timer.start(10)
-
-    def follow_mouse(self):
-        if not self.dragging:
-            self.follow_timer.stop()
-            return
-
-        if not (QApplication.mouseButtons() & Qt.LeftButton):
-            self.dragging = False
-            self.follow_timer.stop()
-            self.try_attach_by_mouse_position()
-            return
-
-        self.move_by_global_pos(QCursor.pos())
-
-    def move_by_global_pos(self, global_pos):
-        self.move(global_pos - self.drag_offset)
-
-    def header_mouse_press(self, event):
-        if event.button() == Qt.LeftButton:
-            self.dragging = True
-            self.drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-
-    def header_mouse_move(self, event):
-        if self.dragging:
-            self.move(event.globalPosition().toPoint() - self.drag_offset)
-
-    def header_mouse_release(self, event):
-        self.dragging = False
-        self.try_attach_by_mouse_position(event.globalPosition().toPoint())
-
-    def header_mouse_double_click(self, event):
-        if event.button() == Qt.LeftButton:
-            self.attach_to_original_position()
-
-    def try_attach_by_mouse_position(self, global_pos=None):
-        if global_pos is None:
-            global_pos = QCursor.pos()
-
-        local_pos = self.source_tab_widget.mapFromGlobal(global_pos)
-
-        if self.source_tab_widget.rect().contains(local_pos):
-            self.attach_to_original_position()
-
-    def attach_to_original_position(self):
-        if self.attached:
-            return
-
-        self.attached = True
-        self.follow_timer.stop()
-
-        self.inner_layout.removeWidget(self.content_widget)
-        self.content_widget.setParent(self.source_tab_widget)
-
-        index = min(self.original_index, self.source_tab_widget.count())
-        self.source_tab_widget.insertTab(index, self.content_widget, self.title)
-        self.source_tab_widget.setCurrentWidget(self.content_widget)
-        self.content_widget.setVisible(True)
-
-        if self in self.parent_window.floating_windows:
-            self.parent_window.floating_windows.remove(self)
-
-        self.close()
-
-    def closeEvent(self, event):
-        if not self.attached:
-            self.attach_to_original_position()
-
-        event.accept()
-
-
-class DetachableTabWidget(QTabWidget):
-    def __init__(self, parent_window):
-        super().__init__()
-
-        self.parent_window = parent_window
-        self.press_index = -1
-        self.press_pos = QPoint(0, 0)
-        self.drag_started = False
-        self.active_floating_window = None
-
-        self.setMovable(True)
-        self.tabBar().installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        if obj == self.tabBar():
-            if event.type() == event.Type.MouseButtonPress and event.button() == Qt.LeftButton:
-                self.press_index = self.tabBar().tabAt(event.pos())
-                self.press_pos = event.globalPosition().toPoint()
-                self.drag_started = False
-                self.active_floating_window = None
-
-            elif event.type() == event.Type.MouseMove:
-                if self.press_index != -1 and event.buttons() & Qt.LeftButton:
-                    global_pos = event.globalPosition().toPoint()
-                    distance = (global_pos - self.press_pos).manhattanLength()
-
-                    if distance > QApplication.startDragDistance() and not self.drag_started:
-                        self.drag_started = True
-                        self.active_floating_window = self.detach_tab(
-                            self.press_index,
-                            global_pos,
-                            drag_mode=True
-                        )
-                        self.press_index = -1
-                        return True
-
-            elif event.type() == event.Type.MouseButtonRelease:
-                if self.drag_started and self.active_floating_window:
-                    self.active_floating_window.dragging = False
-                    self.active_floating_window.try_attach_by_mouse_position(
-                        event.globalPosition().toPoint()
-                    )
-
-                self.press_index = -1
-                self.drag_started = False
-                self.active_floating_window = None
-
-            elif event.type() == event.Type.MouseButtonDblClick and event.button() == Qt.LeftButton:
-                index = self.tabBar().tabAt(event.pos())
-
-                if index != -1:
-                    self.detach_tab(
-                        index,
-                        event.globalPosition().toPoint(),
-                        drag_mode=False
-                    )
-
-                    self.press_index = -1
-                    self.drag_started = False
-                    self.active_floating_window = None
-                    return True
-
-        return super().eventFilter(obj, event)
-
-    def detach_tab(self, index, global_pos, drag_mode=False):
-        if index < 0 or index >= self.count():
-            return None
-
-        content_widget = self.widget(index)
-        title = self.tabText(index)
-
-        self.removeTab(index)
-
-        floating_window = FloatingTabWindow(
-            self,
-            content_widget,
-            title,
-            index,
-            self.parent_window
-        )
-
-        floating_window.move_by_global_pos(global_pos)
-        floating_window.show()
-        floating_window.raise_()
-        floating_window.activateWindow()
-
-        if drag_mode:
-            floating_window.start_follow_mouse()
-
-        self.parent_window.floating_windows.append(floating_window)
-
-        return floating_window
-
-
-class ConsoleBox(QTextEdit):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.run_callback = None
-        self.prompt = ">>> "
-        self.setPlainText(self.prompt)
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Return and not (event.modifiers() & Qt.ShiftModifier):
-            if self.run_callback:
-                self.run_callback()
-            return
-
-        super().keyPressEvent(event)
-
-    def get_current_input(self):
-        text = self.toPlainText()
-        lines = text.splitlines()
-
-        if not lines:
-            return ""
-
-        last_line = lines[-1]
-
-        if last_line.startswith(self.prompt):
-            return last_line[len(self.prompt):]
-
-        return last_line
-
-    def append_output(self, text):
-        cursor = self.textCursor()
-        cursor.movePosition(cursor.End)
-        self.setTextCursor(cursor)
-
-        current = self.toPlainText()
-
-        if not current.endswith("\n"):
-            self.insertPlainText("\n")
-
-        if text:
-            self.insertPlainText(str(text).rstrip() + "\n")
-
-        self.insertPlainText(self.prompt)
-
-        cursor = self.textCursor()
-        cursor.movePosition(cursor.End)
-        self.setTextCursor(cursor)
-
-    def reset_console(self):
-        self.setPlainText(self.prompt)
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -344,28 +76,30 @@ class MainWindow(QMainWindow):
         self.ui_dir = Path(__file__).resolve().parent
         self.source_code_dir = self.ui_dir.parent
         self.default_cpp_path = self.source_code_dir / "src" / "temp" / "main.cpp"
+        self.run_cpp_path = self.source_code_dir / "src" / "temp" / "editor_run.cpp"
+        self.run_exe_path = self.source_code_dir / "src" / "temp" / "editor_run.exe"
 
         self.init_ui()
         self.connect_events()
 
     def init_ui(self):
-        self.setStyleSheet(self.window_style())
+        self.setStyleSheet(window_style())
 
         self.create_top_bar()
 
         self.editor = QPlainTextEdit()
         self.editor.setPlaceholderText("C++ 코드를 작성하세요.")
         self.editor.setPlainText(self.load_default_cpp_code())
-        self.editor.setStyleSheet(self.editor_style())
+        self.editor.setStyleSheet(editor_style())
 
         self.console_box = ConsoleBox()
         self.console_box.setPlaceholderText(">>> 뒤에 입력값을 작성하고 Enter를 누르세요.")
-        self.console_box.setStyleSheet(self.console_style())
+        self.console_box.setStyleSheet(console_style())
 
         self.terminal_box = QTextEdit()
         self.terminal_box.setReadOnly(True)
         self.terminal_box.setPlaceholderText("Build, Debug, 컴파일 메시지가 표시됩니다.")
-        self.terminal_box.setStyleSheet(self.console_style())
+        self.terminal_box.setStyleSheet(console_style())
 
         upper_splitter = QSplitter(Qt.Horizontal)
         upper_splitter.addWidget(self.create_editor_panel())
@@ -389,25 +123,7 @@ class MainWindow(QMainWindow):
     def create_top_bar(self):
         toolbar = QToolBar("Main Toolbar")
         toolbar.setMovable(False)
-        toolbar.setStyleSheet("""
-            QToolBar {
-                background-color: #ffffff;
-                border-bottom: 1px solid #dddddd;
-                spacing: 6px;
-                padding: 6px;
-            }
-            QPushButton {
-                padding: 6px 13px;
-                border: 1px solid #d0d0d0;
-                background-color: #ffffff;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #eef3ff;
-                border: 1px solid #9bb8ff;
-            }
-        """)
+        toolbar.setStyleSheet(toolbar_style())
 
         self.new_button = QPushButton("새 파일")
         self.open_button = QPushButton("열기")
@@ -436,10 +152,10 @@ class MainWindow(QMainWindow):
     def create_editor_panel(self):
         panel = QFrame()
         panel.setFrameShape(QFrame.StyledPanel)
-        panel.setStyleSheet(self.panel_style())
+        panel.setStyleSheet(panel_style())
 
         title = QLabel("Editor")
-        title.setStyleSheet(self.title_style())
+        title.setStyleSheet(title_style())
 
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
@@ -453,18 +169,18 @@ class MainWindow(QMainWindow):
         panel = QFrame()
         panel.setFrameShape(QFrame.StyledPanel)
         panel.setMinimumWidth(360)
-        panel.setStyleSheet(self.panel_style())
+        panel.setStyleSheet(panel_style())
 
         title = QLabel("Tools")
-        title.setStyleSheet(self.title_style())
+        title.setStyleSheet(title_style())
 
         self.feature_tabs = DetachableTabWidget(self)
-        self.feature_tabs.setStyleSheet(self.tab_style())
+        self.feature_tabs.setStyleSheet(tab_style())
 
-        self.feature_tabs.addTab(self.create_testcase_tab(), "테스트케이스")
-        self.feature_tabs.addTab(self.create_graph_tab(), "그래프")
-        self.feature_tabs.addTab(self.create_complexity_tab(), "복잡도")
-        self.feature_tabs.addTab(self.create_template_tab(), "템플릿")
+        self.feature_tabs.addTab(create_testcase_tab(self), "테스트케이스")
+        self.feature_tabs.addTab(create_graph_tab(self), "그래프")
+        self.feature_tabs.addTab(create_complexity_tab(self), "복잡도")
+        self.feature_tabs.addTab(create_template_tab(self), "템플릿")
 
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
@@ -474,111 +190,13 @@ class MainWindow(QMainWindow):
         panel.setLayout(layout)
         return panel
 
-    def create_testcase_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-
-        label = QLabel("테스트케이스 관리")
-        label.setStyleSheet("font-weight: bold;")
-
-        self.testcase_input = QTextEdit()
-        self.testcase_input.setPlaceholderText("테스트 입력")
-        self.testcase_input.setStyleSheet(self.small_box_style())
-
-        self.expected_output = QTextEdit()
-        self.expected_output.setPlaceholderText("예상 출력")
-        self.expected_output.setStyleSheet(self.small_box_style())
-
-        self.run_testcase_button = QPushButton("현재 테스트케이스 실행")
-        self.add_testcase_button = QPushButton("테스트케이스 추가")
-
-        layout.addWidget(label)
-        layout.addWidget(QLabel("입력"))
-        layout.addWidget(self.testcase_input)
-        layout.addWidget(QLabel("예상 출력"))
-        layout.addWidget(self.expected_output)
-        layout.addWidget(self.run_testcase_button)
-        layout.addWidget(self.add_testcase_button)
-
-        tab.setLayout(layout)
-        return tab
-
-    def create_graph_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-
-        label = QLabel("그래프 시각화")
-        label.setStyleSheet("font-weight: bold;")
-
-        self.graph_input = QTextEdit()
-        self.graph_input.setPlaceholderText("그래프 입력 예시\n5 4\n1 2\n1 3\n2 4\n3 5")
-        self.graph_input.setStyleSheet(self.small_box_style())
-
-        self.graph_result = QTextEdit()
-        self.graph_result.setReadOnly(True)
-        self.graph_result.setPlaceholderText("그래프 분석 결과")
-        self.graph_result.setStyleSheet(self.small_box_style())
-
-        self.graph_button = QPushButton("그래프 분석")
-
-        layout.addWidget(label)
-        layout.addWidget(self.graph_input)
-        layout.addWidget(self.graph_button)
-        layout.addWidget(self.graph_result)
-
-        tab.setLayout(layout)
-        return tab
-
-    def create_complexity_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-
-        label = QLabel("시간복잡도 분석")
-        label.setStyleSheet("font-weight: bold;")
-
-        self.complexity_result = QTextEdit()
-        self.complexity_result.setReadOnly(True)
-        self.complexity_result.setPlaceholderText("코드 분석 결과")
-        self.complexity_result.setStyleSheet(self.small_box_style())
-
-        self.complexity_button = QPushButton("복잡도 분석")
-
-        layout.addWidget(label)
-        layout.addWidget(self.complexity_button)
-        layout.addWidget(self.complexity_result)
-
-        tab.setLayout(layout)
-        return tab
-
-    def create_template_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-
-        label = QLabel("템플릿")
-        label.setStyleSheet("font-weight: bold;")
-
-        self.basic_template_button = QPushButton("기본 C++ 템플릿")
-        self.graph_template_button = QPushButton("그래프 BFS 템플릿")
-        self.dp_template_button = QPushButton("DP 템플릿")
-        self.clear_console_button = QPushButton("콘솔 지우기")
-
-        layout.addWidget(label)
-        layout.addWidget(self.basic_template_button)
-        layout.addWidget(self.graph_template_button)
-        layout.addWidget(self.dp_template_button)
-        layout.addWidget(self.clear_console_button)
-        layout.addStretch()
-
-        tab.setLayout(layout)
-        return tab
-
     def create_bottom_panel(self):
         panel = QFrame()
         panel.setFrameShape(QFrame.StyledPanel)
-        panel.setStyleSheet(self.panel_style())
+        panel.setStyleSheet(panel_style())
 
         self.bottom_tabs = DetachableTabWidget(self)
-        self.bottom_tabs.setStyleSheet(self.tab_style())
+        self.bottom_tabs.setStyleSheet(tab_style())
 
         console_tab = QWidget()
         console_layout = QVBoxLayout()
@@ -700,39 +318,36 @@ class MainWindow(QMainWindow):
     def run_current_editor_code(self, input_text):
         code = self.editor.toPlainText()
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_dir = Path(temp_dir)
-            cpp_path = temp_dir / "run.cpp"
-            exe_path = temp_dir / "run.exe"
+        self.run_cpp_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(cpp_path, "w", encoding="utf-8") as f:
-                f.write(code)
+        with open(self.run_cpp_path, "w", encoding="utf-8") as f:
+            f.write(code)
 
-            compile_result = self.execution_manager.compile_code(
-                str(cpp_path),
-                str(exe_path)
-            )
+        compile_result = self.execution_manager.compile_code(
+            str(self.run_cpp_path),
+            str(self.run_exe_path)
+        )
 
-            if not compile_result.get("success"):
-                return {
-                    "success": False,
-                    "type": "compile",
-                    "message": compile_result.get("message", "")
-                }
-
-            run_result = self.execution_manager.run_code(
-                str(exe_path),
-                stdin_data=input_text,
-                timeout=2
-            )
-
+        if not compile_result.get("success"):
             return {
-                "success": run_result.get("success", False),
-                "type": "run",
-                "stdout": run_result.get("stdout", ""),
-                "stderr": run_result.get("stderr", ""),
-                "execution_time": run_result.get("execution_time", 0.0)
+                "success": False,
+                "type": "compile",
+                "message": compile_result.get("message", "")
             }
+
+        run_result = self.execution_manager.run_code(
+            str(self.run_exe_path),
+            stdin_data=input_text,
+            timeout=2
+        )
+
+        return {
+            "success": run_result.get("success", False),
+            "type": "run",
+            "stdout": run_result.get("stdout", ""),
+            "stderr": run_result.get("stderr", ""),
+            "execution_time": run_result.get("execution_time", 0.0)
+        }
 
     def build_code(self):
         self.bottom_tabs.setCurrentIndex(1)
@@ -745,23 +360,20 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_dir = Path(temp_dir)
-                cpp_path = temp_dir / "build.cpp"
-                exe_path = temp_dir / "build.exe"
+            self.run_cpp_path.parent.mkdir(parents=True, exist_ok=True)
 
-                with open(cpp_path, "w", encoding="utf-8") as f:
-                    f.write(code)
+            with open(self.run_cpp_path, "w", encoding="utf-8") as f:
+                f.write(code)
 
-                result = self.execution_manager.compile_code(
-                    str(cpp_path),
-                    str(exe_path)
-                )
+            result = self.execution_manager.compile_code(
+                str(self.run_cpp_path),
+                str(self.run_exe_path)
+            )
 
-                if result.get("success"):
-                    self.terminal_box.setPlainText("[Build Success]\n\n" + result.get("message", ""))
-                else:
-                    self.terminal_box.setPlainText("[Build Failed]\n\n" + result.get("message", ""))
+            if result.get("success"):
+                self.terminal_box.setPlainText("[Build Success]\n\n" + result.get("message", ""))
+            else:
+                self.terminal_box.setPlainText("[Build Failed]\n\n" + result.get("message", ""))
 
         except Exception as e:
             self.terminal_box.setPlainText("[Build Error]\n\n" + str(e))
@@ -886,13 +498,13 @@ class MainWindow(QMainWindow):
         )
 
     def insert_basic_template(self):
-        self.editor.setPlainText(self.default_cpp_code())
+        self.editor.setPlainText(default_cpp_code())
 
     def insert_graph_template(self):
-        self.editor.setPlainText(self.graph_cpp_code())
+        self.editor.setPlainText(graph_cpp_code())
 
     def insert_dp_template(self):
-        self.editor.setPlainText(self.dp_cpp_code())
+        self.editor.setPlainText(dp_cpp_code())
 
     def debug_code(self):
         self.bottom_tabs.setCurrentIndex(1)
@@ -914,196 +526,6 @@ class MainWindow(QMainWindow):
                 with open(self.default_cpp_path, "r", encoding="utf-8") as f:
                     return f.read()
             except Exception:
-                return self.default_cpp_code()
+                return default_cpp_code()
 
-        return self.default_cpp_code()
-
-    def default_cpp_code(self):
-        return """#include <bits/stdc++.h>
-using namespace std;
-
-int main(){
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-
-    int n;
-    cin >> n;
-
-    cout << n << "\\n";
-
-    return 0;
-}
-"""
-
-    def graph_cpp_code(self):
-        return """#include <bits/stdc++.h>
-using namespace std;
-
-int main(){
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-
-    int n, m;
-    cin >> n >> m;
-
-    vector<vector<int>> g(n + 1);
-
-    for(int i = 0; i < m; i++){
-        int a, b;
-        cin >> a >> b;
-        g[a].push_back(b);
-        g[b].push_back(a);
-    }
-
-    queue<int> q;
-    vector<int> visited(n + 1, 0);
-
-    q.push(1);
-    visited[1] = 1;
-
-    while(!q.empty()){
-        int x = q.front();
-        q.pop();
-
-        cout << x << ' ';
-
-        for(int nx : g[x]){
-            if(!visited[nx]){
-                visited[nx] = 1;
-                q.push(nx);
-            }
-        }
-    }
-
-    return 0;
-}
-"""
-
-    def dp_cpp_code(self):
-        return """#include <bits/stdc++.h>
-using namespace std;
-
-int main(){
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-
-    int n;
-    cin >> n;
-
-    vector<int> dp(n + 1, 0);
-
-    dp[0] = 1;
-
-    for(int i = 1; i <= n; i++){
-        dp[i] = dp[i - 1];
-    }
-
-    cout << dp[n] << "\\n";
-
-    return 0;
-}
-"""
-
-    def window_style(self):
-        return """
-            QMainWindow {
-                background-color: #f5f6f8;
-            }
-            QPushButton {
-                padding: 7px 10px;
-                border: 1px solid #d0d0d0;
-                background-color: #ffffff;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #eef3ff;
-                border: 1px solid #9bb8ff;
-            }
-            QLabel {
-                color: #222222;
-                font-size: 13px;
-            }
-        """
-
-    def panel_style(self):
-        return """
-            QFrame {
-                background-color: #ffffff;
-                border: 1px solid #dddddd;
-                border-radius: 8px;
-            }
-        """
-
-    def title_style(self):
-        return """
-            QLabel {
-                font-size: 15px;
-                font-weight: bold;
-                padding: 4px;
-                border: none;
-            }
-        """
-
-    def tab_style(self):
-        return """
-            QTabWidget::pane {
-                border: 1px solid #dddddd;
-                border-radius: 6px;
-                background-color: #ffffff;
-            }
-            QTabBar::tab {
-                background-color: #f1f2f4;
-                border: 1px solid #d0d0d0;
-                padding: 7px 13px;
-                margin-right: 2px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-            }
-            QTabBar::tab:selected {
-                background-color: #ffffff;
-                font-weight: bold;
-            }
-            QTabBar::tab:hover {
-                background-color: #eef3ff;
-            }
-        """
-
-    def editor_style(self):
-        return """
-            QPlainTextEdit {
-                font-family: Consolas;
-                font-size: 15px;
-                background-color: #ffffff;
-                color: #111111;
-                border: 1px solid #cccccc;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """
-
-    def console_style(self):
-        return """
-            QTextEdit {
-                font-family: Consolas;
-                font-size: 14px;
-                background-color: #fbfbfb;
-                color: #111111;
-                border: 1px solid #cccccc;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """
-
-    def small_box_style(self):
-        return """
-            QTextEdit {
-                font-family: Consolas;
-                font-size: 13px;
-                background-color: #fbfbfb;
-                color: #111111;
-                border: 1px solid #cccccc;
-                border-radius: 6px;
-                padding: 6px;
-            }
-        """
+        return default_cpp_code()
