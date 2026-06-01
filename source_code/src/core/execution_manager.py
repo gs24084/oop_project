@@ -6,7 +6,8 @@ from pathlib import Path
 
 
 class ExecutionManager:
-    def __init__(self, compiler="g++"):
+    def __init__(self, compiler=r"C:\Users\deepb\Downloads\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r2\mingw64\bin\g++.exe"
+):
         self.compiler = compiler
 
     def compile_code(
@@ -103,6 +104,9 @@ class ExecutionManager:
                 text=True,
                 timeout=timeout
             )
+            print("returncode =", result.returncode)
+            print("stdout =", repr(result.stdout))
+            print("stderr =", repr(result.stderr))
 
             end_time = time.perf_counter()
 
