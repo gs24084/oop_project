@@ -3,11 +3,11 @@
 import subprocess
 import time
 from pathlib import Path
-
+import os
+import shutil
 
 class ExecutionManager:
-    def __init__(self, compiler=r"C:\Users\deepb\Downloads\winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r2\mingw64\bin\g++.exe"
-):
+    def __init__(self, compiler="g++"):
         self.compiler = compiler
 
     def compile_code(
@@ -32,9 +32,15 @@ class ExecutionManager:
                 "success": False,
                 "message": f"File not found: {cpp_path}"
             }
+        compiler_path = shutil.which(self.compiler)
 
+        if compiler_path is None:
+            return {
+                "success": False,
+                "message": "g++ compiler not found. Please install GCC and add it to PATH."
+            }
         command = [
-            self.compiler,
+            compiler_path,
             str(cpp_file),
             "-std=c++17",
             "-O2",
@@ -97,12 +103,28 @@ class ExecutionManager:
         start_time = time.perf_counter()
 
         try:
+            compiler_path = shutil.which(self.compiler)
+
+            if compiler_path is None:
+                return {
+                    "success": False,
+                    "stdout": "",
+                    "stderr": "g++ compiler not found",
+                    "execution_time": 0.0
+                }
+
+            compiler_bin = str(Path(compiler_path).parent)
+
+            env = os.environ.copy()
+            env["PATH"] = compiler_bin + ";" + env["PATH"]
+
             result = subprocess.run(
                 [str(exe_file)],
                 input=stdin_data,
                 capture_output=True,
                 text=True,
-                timeout=timeout
+                timeout=timeout,
+                env=env
             )
             print("returncode =", result.returncode)
             print("stdout =", repr(result.stdout))

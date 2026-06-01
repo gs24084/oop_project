@@ -1,9 +1,14 @@
-#include <iostream>
+#include <bits/stdc++.h>
 using namespace std;
 
-int main() {
+int main(){
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
     int n;
     cin >> n;
 
-    cout << n * n << '\n';
+    cout << n*n*n << "\n";
+    //asdfadsfkjhasdfh
+    return 0;
 }
