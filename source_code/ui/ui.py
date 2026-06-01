@@ -96,7 +96,10 @@ class FloatingTabWindow(QDialog):
         self.inner_layout = QVBoxLayout()
         self.inner_layout.setContentsMargins(8, 8, 8, 8)
 
+        self.content_widget.setParent(self.container)
         self.inner_layout.addWidget(self.content_widget)
+        self.content_widget.setVisible(True)
+
         self.container.setLayout(self.inner_layout)
 
         layout = QVBoxLayout()
@@ -159,10 +162,12 @@ class FloatingTabWindow(QDialog):
         self.follow_timer.stop()
 
         self.inner_layout.removeWidget(self.content_widget)
+        self.content_widget.setParent(self.source_tab_widget)
 
         index = min(self.original_index, self.source_tab_widget.count())
         self.source_tab_widget.insertTab(index, self.content_widget, self.title)
         self.source_tab_widget.setCurrentWidget(self.content_widget)
+        self.content_widget.setVisible(True)
 
         if self in self.parent_window.floating_windows:
             self.parent_window.floating_windows.remove(self)
