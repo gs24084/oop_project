@@ -1,13 +1,14 @@
+import tempfile
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
-    QTextEdit,
     QPlainTextEdit,
-    QLineEdit,
+    QTextEdit,
     QPushButton,
     QLabel,
     QVBoxLayout,
-    QHBoxLayout,
     QFileDialog,
     QMessageBox,
     QSplitter,
@@ -20,21 +21,78 @@ from PySide6.QtCore import Qt
 
 
 try:
-    from source_code.ui.function import FileManager, CompilerRunner
+    from source_code.src.core.execution_manager import ExecutionManager
 except Exception:
-    class FileManager:
-        def save_file(self, file_path, content):
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content)
+    class ExecutionManager:
+        def __init__(self, compiler="g++"):
+            self.compiler = compiler
 
-    class CompilerRunner:
-        def run(self, code, input_text):
+        def compile_code(self, cpp_path: str, output_path: str) -> dict:
             return {
-                "success": True,
-                "output": "아직 실제 실행 기능이 연결되지 않았습니다.\n\n[입력값]\n" + input_text,
-                "error": "",
-                "time": 0
+                "success": False,
+                "message": "ExecutionManager를 불러오지 못했습니다."
             }
+
+        def run_code(self, executable_path: str, stdin_data: str = "", timeout: int = 2) -> dict:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "ExecutionManager를 불러오지 못했습니다.",
+                "execution_time": 0.0
+            }
+
+
+class ConsoleBox(QTextEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.run_callback = None
+        self.prompt = ">>> "
+        self.setPlainText(self.prompt)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Return and not (event.modifiers() & Qt.ShiftModifier):
+            if self.run_callback:
+                self.run_callback()
+            return
+
+        super().keyPressEvent(event)
+
+    def get_current_input(self):
+        text = self.toPlainText()
+        lines = text.splitlines()
+
+        if not lines:
+            return ""
+
+        last_line = lines[-1]
+
+        if last_line.startswith(self.prompt):
+            return last_line[len(self.prompt):]
+
+        return last_line
+
+    def append_output(self, text):
+        cursor = self.textCursor()
+        cursor.movePosition(cursor.End)
+        self.setTextCursor(cursor)
+
+        current = self.toPlainText()
+
+        if not current.endswith("\n"):
+            self.insertPlainText("\n")
+
+        if text:
+            self.insertPlainText(str(text).rstrip() + "\n")
+
+        self.insertPlainText(self.prompt)
+
+        cursor = self.textCursor()
+        cursor.movePosition(cursor.End)
+        self.setTextCursor(cursor)
+
+    def reset_console(self):
+        self.setPlainText(self.prompt)
 
 
 class MainWindow(QMainWindow):
@@ -42,11 +100,14 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("PS C++ Editor")
-        self.resize(1300, 850)
+        self.resize(1350, 850)
 
-        self.file_manager = FileManager()
-        self.runner = CompilerRunner()
+        self.execution_manager = ExecutionManager()
         self.current_file_path = None
+
+        self.ui_dir = Path(__file__).resolve().parent
+        self.source_code_dir = self.ui_dir.parent
+        self.default_cpp_path = self.source_code_dir / "src" / "temp" / "main.cpp"
 
         self.init_ui()
         self.connect_events()
@@ -58,32 +119,27 @@ class MainWindow(QMainWindow):
 
         self.editor = QPlainTextEdit()
         self.editor.setPlaceholderText("C++ 코드를 작성하세요.")
-        self.editor.setPlainText(self.default_cpp_code())
+        self.editor.setPlainText(self.load_default_cpp_code())
         self.editor.setStyleSheet(self.editor_style())
 
-        self.console_output = QTextEdit()
-        self.console_output.setReadOnly(True)
-        self.console_output.setPlaceholderText("입력하고 Enter를 누르면 실행 결과가 이곳에 표시됩니다.")
-        self.console_output.setStyleSheet(self.console_output_style())
-
-        self.console_input = QLineEdit()
-        self.console_input.setPlaceholderText("입력값을 작성한 뒤 Enter를 누르세요.")
-        self.console_input.setStyleSheet(self.console_input_style())
+        self.console_box = ConsoleBox()
+        self.console_box.setPlaceholderText(">>> 뒤에 입력값을 작성하고 Enter를 누르세요.")
+        self.console_box.setStyleSheet(self.console_style())
 
         self.terminal_box = QTextEdit()
         self.terminal_box.setReadOnly(True)
-        self.terminal_box.setPlaceholderText("Build, Debug 로그가 표시됩니다.")
-        self.terminal_box.setStyleSheet(self.console_output_style())
+        self.terminal_box.setPlaceholderText("Build, Debug, 컴파일 메시지가 표시됩니다.")
+        self.terminal_box.setStyleSheet(self.console_style())
 
         upper_splitter = QSplitter(Qt.Horizontal)
         upper_splitter.addWidget(self.create_editor_panel())
         upper_splitter.addWidget(self.create_feature_panel())
-        upper_splitter.setSizes([850, 430])
+        upper_splitter.setSizes([900, 420])
 
         main_splitter = QSplitter(Qt.Vertical)
         main_splitter.addWidget(upper_splitter)
         main_splitter.addWidget(self.create_bottom_panel())
-        main_splitter.setSizes([570, 230])
+        main_splitter.setSizes([580, 230])
 
         container = QWidget()
         layout = QVBoxLayout()
@@ -112,7 +168,7 @@ class MainWindow(QMainWindow):
                 font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #f2f5ff;
+                background-color: #eef3ff;
                 border: 1px solid #9bb8ff;
             }
         """)
@@ -132,7 +188,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.setting_button)
 
         spacer = QWidget()
-        spacer.setFixedWidth(360)
+        spacer.setFixedWidth(380)
         toolbar.addWidget(spacer)
 
         toolbar.addWidget(self.run_button)
@@ -168,6 +224,7 @@ class MainWindow(QMainWindow):
 
         self.feature_tabs = QTabWidget()
         self.feature_tabs.setStyleSheet(self.tab_style())
+
         self.feature_tabs.addTab(self.create_testcase_tab(), "테스트케이스")
         self.feature_tabs.addTab(self.create_graph_tab(), "그래프")
         self.feature_tabs.addTab(self.create_complexity_tab(), "복잡도")
@@ -267,11 +324,13 @@ class MainWindow(QMainWindow):
         self.basic_template_button = QPushButton("기본 C++ 템플릿")
         self.graph_template_button = QPushButton("그래프 BFS 템플릿")
         self.dp_template_button = QPushButton("DP 템플릿")
+        self.clear_console_button = QPushButton("콘솔 지우기")
 
         layout.addWidget(label)
         layout.addWidget(self.basic_template_button)
         layout.addWidget(self.graph_template_button)
         layout.addWidget(self.dp_template_button)
+        layout.addWidget(self.clear_console_button)
         layout.addStretch()
 
         tab.setLayout(layout)
@@ -293,8 +352,7 @@ class MainWindow(QMainWindow):
         console_title.setStyleSheet("font-weight: bold;")
 
         console_layout.addWidget(console_title)
-        console_layout.addWidget(self.console_output)
-        console_layout.addWidget(self.console_input)
+        console_layout.addWidget(self.console_box)
 
         console_tab.setLayout(console_layout)
 
@@ -318,7 +376,7 @@ class MainWindow(QMainWindow):
         self.build_button.clicked.connect(self.build_code)
         self.debug_button.clicked.connect(self.debug_code)
 
-        self.console_input.returnPressed.connect(self.run_code_from_console)
+        self.console_box.run_callback = self.run_code_from_console
 
         self.run_testcase_button.clicked.connect(self.run_current_testcase)
         self.add_testcase_button.clicked.connect(self.add_testcase)
@@ -329,6 +387,7 @@ class MainWindow(QMainWindow):
         self.basic_template_button.clicked.connect(self.insert_basic_template)
         self.graph_template_button.clicked.connect(self.insert_graph_template)
         self.dp_template_button.clicked.connect(self.insert_dp_template)
+        self.clear_console_button.clicked.connect(self.clear_console)
 
     def new_file(self):
         if self.editor.toPlainText().strip():
@@ -370,7 +429,9 @@ class MainWindow(QMainWindow):
 
         if self.current_file_path:
             try:
-                self.file_manager.save_file(self.current_file_path, code)
+                with open(self.current_file_path, "w", encoding="utf-8") as f:
+                    f.write(code)
+
                 self.statusBar().showMessage(f"저장 완료: {self.current_file_path}")
                 return
             except Exception as e:
@@ -391,16 +452,87 @@ class MainWindow(QMainWindow):
             file_path += ".cpp"
 
         try:
-            self.file_manager.save_file(file_path, code)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(code)
+
             self.current_file_path = file_path
             self.statusBar().showMessage(f"저장 완료: {file_path}")
 
         except Exception as e:
             QMessageBox.critical(self, "저장 실패", str(e))
 
+    def run_current_editor_code(self, input_text):
+        code = self.editor.toPlainText()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = Path(temp_dir)
+            cpp_path = temp_dir / "run.cpp"
+            exe_path = temp_dir / "run.exe"
+
+            with open(cpp_path, "w", encoding="utf-8") as f:
+                f.write(code)
+
+            compile_result = self.execution_manager.compile_code(
+                str(cpp_path),
+                str(exe_path)
+            )
+
+            if not compile_result.get("success"):
+                return {
+                    "success": False,
+                    "type": "compile",
+                    "message": compile_result.get("message", "")
+                }
+
+            run_result = self.execution_manager.run_code(
+                str(exe_path),
+                stdin_data=input_text,
+                timeout=2
+            )
+
+            return {
+                "success": run_result.get("success", False),
+                "type": "run",
+                "stdout": run_result.get("stdout", ""),
+                "stderr": run_result.get("stderr", ""),
+                "execution_time": run_result.get("execution_time", 0.0)
+            }
+
+    def build_code(self):
+        self.bottom_tabs.setCurrentIndex(1)
+        self.terminal_box.clear()
+
+        code = self.editor.toPlainText()
+
+        if not code.strip():
+            self.terminal_box.setPlainText("[Build Failed]\n\n코드가 비어 있습니다.")
+            return
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_dir = Path(temp_dir)
+                cpp_path = temp_dir / "build.cpp"
+                exe_path = temp_dir / "build.exe"
+
+                with open(cpp_path, "w", encoding="utf-8") as f:
+                    f.write(code)
+
+                result = self.execution_manager.compile_code(
+                    str(cpp_path),
+                    str(exe_path)
+                )
+
+                if result.get("success"):
+                    self.terminal_box.setPlainText("[Build Success]\n\n" + result.get("message", ""))
+                else:
+                    self.terminal_box.setPlainText("[Build Failed]\n\n" + result.get("message", ""))
+
+        except Exception as e:
+            self.terminal_box.setPlainText("[Build Error]\n\n" + str(e))
+
     def run_code_from_console(self):
         code = self.editor.toPlainText()
-        input_text = self.console_input.text()
+        input_text = self.console_box.get_current_input()
 
         if not code.strip():
             QMessageBox.warning(self, "실행 불가", "코드가 비어 있습니다.")
@@ -408,72 +540,75 @@ class MainWindow(QMainWindow):
 
         self.bottom_tabs.setCurrentIndex(0)
 
-        self.append_console("> " + input_text)
-        self.console_input.clear()
-
         try:
-            result = self.runner.run(code, input_text)
+            result = self.run_current_editor_code(input_text)
+
+            if result.get("type") == "compile":
+                self.console_box.append_output("[Compile Error]\n" + result.get("message", ""))
+                return
+
             self.append_run_result(result)
+
         except Exception as e:
-            self.append_console("[UI 연결 오류]\n" + str(e))
+            self.console_box.append_output("[UI Error]\n" + str(e))
 
     def append_run_result(self, result):
         success = result.get("success", False)
-        output = result.get("output", "")
-        error = result.get("error", "")
-        time = result.get("time", None)
+        stdout = result.get("stdout", "")
+        stderr = result.get("stderr", "")
+        execution_time = result.get("execution_time", 0.0)
 
         if success:
-            text = output.strip()
-            if not text:
-                text = "(출력 없음)"
+            output = stdout.strip()
 
-            self.append_console(text)
+            if not output:
+                output = "(출력 없음)"
 
-            if time is not None:
-                self.append_console(f"[실행 시간] {time}")
+            self.append_console(output)
+            self.append_console(f"[실행 시간] {execution_time}s")
 
         else:
-            text = error.strip() if error else "알 수 없는 오류가 발생했습니다."
-            self.append_console("[실행 실패]\n" + text)
+            error_text = stderr.strip() if stderr else "실행 중 오류가 발생했습니다."
+            self.append_console("[Runtime Error]\n" + error_text)
+            self.append_console(f"[실행 시간] {execution_time}s")
 
     def append_console(self, text):
-        current = self.console_output.toPlainText()
+        self.console_box.append_output(text)
 
-        if current.strip():
-            self.console_output.append(text)
-        else:
-            self.console_output.setPlainText(text)
-
-        cursor = self.console_output.textCursor()
-        cursor.movePosition(cursor.End)
-        self.console_output.setTextCursor(cursor)
-
-    def build_code(self):
-        self.bottom_tabs.setCurrentIndex(1)
-        self.terminal_box.setPlainText(
-            "Build 버튼이 눌렸습니다.\n"
-            "실제 빌드 기능은 function 담당 코드와 연결될 예정입니다."
-        )
-
-    def debug_code(self):
-        self.bottom_tabs.setCurrentIndex(1)
-        self.terminal_box.setPlainText(
-            "Debug 버튼이 눌렸습니다.\n"
-            "디버그 기능은 추후 연결될 예정입니다."
-        )
+    def clear_console(self):
+        self.console_box.reset_console()
 
     def run_current_testcase(self):
         code = self.editor.toPlainText()
         input_text = self.testcase_input.toPlainText()
+        expected = self.expected_output.toPlainText().strip()
+
+        if not code.strip():
+            QMessageBox.warning(self, "실행 불가", "코드가 비어 있습니다.")
+            return
 
         self.bottom_tabs.setCurrentIndex(0)
-        self.append_console("[테스트케이스 실행]")
-        self.append_console("> " + input_text)
+        self.console_box.append_output("[테스트케이스 실행]\n입력:\n" + input_text.strip())
 
         try:
-            result = self.runner.run(code, input_text)
+            result = self.run_current_editor_code(input_text)
+
+            if result.get("type") == "compile":
+                self.console_box.append_output("[Compile Error]\n" + result.get("message", ""))
+                return
+
             self.append_run_result(result)
+
+            actual = result.get("stdout", "").strip()
+
+            if expected:
+                if actual == expected:
+                    self.append_console("[결과 비교] 정답")
+                else:
+                    self.append_console("[결과 비교] 오답")
+                    self.append_console("[예상 출력]\n" + expected)
+                    self.append_console("[실제 출력]\n" + actual)
+
         except Exception as e:
             self.append_console("[테스트케이스 실행 오류]\n" + str(e))
 
@@ -481,7 +616,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "테스트케이스 추가",
-            "테스트케이스 저장 기능은 추후 function 담당 코드와 연결할 예정입니다."
+            "테스트케이스 저장 기능은 추후 연결할 예정입니다."
         )
 
     def analyze_graph(self):
@@ -511,7 +646,7 @@ class MainWindow(QMainWindow):
             "임시 시간복잡도 분석 결과\n\n"
             f"for 개수: {for_count}\n"
             f"while 개수: {while_count}\n\n"
-            "정확한 복잡도 분석은 추후 function 담당 코드와 연결할 예정입니다."
+            "정확한 분석은 추후 연결할 예정입니다."
         )
 
     def insert_basic_template(self):
@@ -523,12 +658,29 @@ class MainWindow(QMainWindow):
     def insert_dp_template(self):
         self.editor.setPlainText(self.dp_cpp_code())
 
+    def debug_code(self):
+        self.bottom_tabs.setCurrentIndex(1)
+        self.terminal_box.setPlainText(
+            "Debug 버튼이 눌렸습니다.\n"
+            "디버그 기능은 추후 연결할 예정입니다."
+        )
+
     def show_setting_message(self):
         QMessageBox.information(
             self,
             "설정",
             "설정 기능은 추후 추가할 예정입니다."
         )
+
+    def load_default_cpp_code(self):
+        if self.default_cpp_path.exists():
+            try:
+                with open(self.default_cpp_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception:
+                return self.default_cpp_code()
+
+        return self.default_cpp_code()
 
     def default_cpp_code(self):
         return """#include <bits/stdc++.h>
@@ -694,7 +846,7 @@ int main(){
             }
         """
 
-    def console_output_style(self):
+    def console_style(self):
         return """
             QTextEdit {
                 font-family: Consolas;
@@ -702,19 +854,6 @@ int main(){
                 background-color: #fbfbfb;
                 color: #111111;
                 border: 1px solid #cccccc;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """
-
-    def console_input_style(self):
-        return """
-            QLineEdit {
-                font-family: Consolas;
-                font-size: 14px;
-                background-color: #ffffff;
-                color: #111111;
-                border: 1px solid #bdbdbd;
                 border-radius: 6px;
                 padding: 8px;
             }
