@@ -1,9 +1,16 @@
 import sys
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication
+from source_code.ui.ui import MainWindow
 
-app = QApplication(sys.argv)
 
-label = QLabel("Hello PS Editor")
-label.show()
+def main():
+    app = QApplication(sys.argv)
 
-app.exec()
+    window = MainWindow()
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
