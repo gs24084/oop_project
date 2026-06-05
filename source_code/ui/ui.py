@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
 
         self.terminal_box = QTextEdit()
         self.terminal_box.setReadOnly(True)
-        self.terminal_box.setPlaceholderText("Build, Debug, 컴파일 메시지가 표시됩니다.")
+        self.terminal_box.setPlaceholderText("Debug, 컴파일 메시지가 표시됩니다.")
         self.terminal_box.setStyleSheet(console_style())
 
         upper_splitter = QSplitter(Qt.Horizontal)
@@ -140,7 +140,6 @@ class MainWindow(QMainWindow):
         self.setting_button = QPushButton("설정")
 
         self.run_button = QPushButton("실행")
-        self.build_button = QPushButton("Build")
         self.debug_button = QPushButton("Debug")
 
         toolbar.addWidget(self.new_button)
@@ -153,7 +152,6 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(spacer)
 
         toolbar.addWidget(self.run_button)
-        toolbar.addWidget(self.build_button)
         toolbar.addWidget(self.debug_button)
 
         self.addToolBar(Qt.TopToolBarArea, toolbar)
@@ -236,7 +234,6 @@ class MainWindow(QMainWindow):
         self.setting_button.clicked.connect(self.show_setting_message)
 
         self.run_button.clicked.connect(self.run_code_from_console)
-        self.build_button.clicked.connect(self.build_code)
         self.debug_button.clicked.connect(self.debug_code)
 
         self.console_box.run_callback = self.run_code_from_console
@@ -324,7 +321,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "저장 실패", str(e))
 
-    def run_current_editor_code(self, input_text):
+    def save_editor_code_to_temp(self):
         code = self.editor.toPlainText()
 
         self.run_cpp_path.parent.mkdir(parents=True, exist_ok=True)
@@ -332,16 +329,41 @@ class MainWindow(QMainWindow):
         with open(self.run_cpp_path, "w", encoding="utf-8") as f:
             f.write(code)
 
+    def compile_current_editor_code(self):
+        code = self.editor.toPlainText()
+
+        if not code.strip():
+            return {
+                "success": False,
+                "type": "compile",
+                "message": "코드가 비어 있습니다."
+            }
+
+        self.save_editor_code_to_temp()
+
         compile_result = self.execution_manager.compile_code(
             str(self.run_cpp_path),
             str(self.run_exe_path)
         )
 
+        return {
+            "success": compile_result.get("success", False),
+            "type": "compile",
+            "message": compile_result.get("message", ""),
+            "cpp_path": str(self.run_cpp_path),
+            "exe_path": str(self.run_exe_path)
+        }
+
+    def run_current_editor_code(self, input_text):
+        compile_result = self.compile_current_editor_code()
+
         if not compile_result.get("success"):
             return {
                 "success": False,
                 "type": "compile",
-                "message": compile_result.get("message", "")
+                "message": compile_result.get("message", ""),
+                "cpp_path": compile_result.get("cpp_path", ""),
+                "exe_path": compile_result.get("exe_path", "")
             }
 
         run_result = self.execution_manager.run_code(
@@ -355,37 +377,55 @@ class MainWindow(QMainWindow):
             "type": "run",
             "stdout": run_result.get("stdout", ""),
             "stderr": run_result.get("stderr", ""),
-            "execution_time": run_result.get("execution_time", 0.0)
+            "execution_time": run_result.get("execution_time", 0.0),
+            "cpp_path": str(self.run_cpp_path),
+            "exe_path": str(self.run_exe_path)
         }
 
-    def build_code(self):
+    def debug_code(self):
         self.bottom_tabs.setCurrentIndex(1)
         self.terminal_box.clear()
 
         code = self.editor.toPlainText()
+        input_text = self.console_box.get_current_input()
 
         if not code.strip():
-            self.terminal_box.setPlainText("[Build Failed]\n\n코드가 비어 있습니다.")
+            self.terminal_box.setPlainText("[Debug Failed]\n\n코드가 비어 있습니다.")
             return
 
         try:
-            self.run_cpp_path.parent.mkdir(parents=True, exist_ok=True)
+            result = self.run_current_editor_code(input_text)
 
-            with open(self.run_cpp_path, "w", encoding="utf-8") as f:
-                f.write(code)
+            lines = []
+            lines.append("[Debug Info]")
+            lines.append("")
+            lines.append(f"source file: {result.get('cpp_path', str(self.run_cpp_path))}")
+            lines.append(f"executable: {result.get('exe_path', str(self.run_exe_path))}")
+            lines.append(f"input: {repr(input_text)}")
+            lines.append(f"result type: {result.get('type')}")
+            lines.append(f"success: {result.get('success')}")
+            lines.append(f"execution time: {result.get('execution_time', 0.0)}s")
 
-            result = self.execution_manager.compile_code(
-                str(self.run_cpp_path),
-                str(self.run_exe_path)
-            )
+            if result.get("type") == "compile":
+                lines.append("")
+                lines.append("[Compile Message]")
+                lines.append(result.get("message", ""))
 
-            if result.get("success"):
-                self.terminal_box.setPlainText("[Build Success]\n\n" + result.get("message", ""))
-            else:
-                self.terminal_box.setPlainText("[Build Failed]\n\n" + result.get("message", ""))
+            elif result.get("type") == "run":
+                lines.append("")
+                lines.append("[stdout]")
+                stdout = result.get("stdout", "")
+                lines.append(stdout if stdout else "(empty)")
+
+                lines.append("")
+                lines.append("[stderr]")
+                stderr = result.get("stderr", "")
+                lines.append(stderr if stderr else "(empty)")
+
+            self.terminal_box.setPlainText("\n".join(lines))
 
         except Exception as e:
-            self.terminal_box.setPlainText("[Build Error]\n\n" + str(e))
+            self.terminal_box.setPlainText("[Debug Error]\n\n" + str(e))
 
     def run_code_from_console(self):
         code = self.editor.toPlainText()
@@ -514,13 +554,6 @@ class MainWindow(QMainWindow):
 
     def insert_dp_template(self):
         self.editor.setPlainText(dp_cpp_code())
-
-    def debug_code(self):
-        self.bottom_tabs.setCurrentIndex(1)
-        self.terminal_box.setPlainText(
-            "Debug 버튼이 눌렸습니다.\n"
-            "디버그 기능은 추후 연결할 예정입니다."
-        )
 
     def show_setting_message(self):
         QMessageBox.information(
