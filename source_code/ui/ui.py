@@ -76,7 +76,7 @@ except Exception as e:
     COMPLEXITY_IMPORT_ERROR = str(e)
 
     class ComplexityAnalyzer:
-        def __init__(self, use_ollama=False, model="qwen3:0.6b"):
+        def __init__(self, use_ollama=True, model="qwen3:0.6b"):
             self.use_ollama = use_ollama
             self.model = model
 
@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
         self.resize(1350, 850)
 
         self.execution_manager = ExecutionManager()
-        self.complexity_analyzer = ComplexityAnalyzer(use_ollama=False)
+        self.complexity_analyzer = ComplexityAnalyzer(use_ollama=True)
 
         self.current_file_path = None
         self.floating_windows = []

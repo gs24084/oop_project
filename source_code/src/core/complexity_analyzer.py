@@ -6,7 +6,7 @@ class ComplexityAnalyzer:
 
     def __init__(
         self,
-        use_ollama=False,
+        use_ollama=True,
         model="qwen3:0.6b"
     ):
         self.use_ollama = use_ollama
@@ -144,12 +144,19 @@ class ComplexityAnalyzer:
         prompt = f"""
 You are a competitive programming expert.
 
-Estimate the time complexity.
+Analyze the following C++ code.
 
-Return exactly:
+Return ONLY the following format.
 
-Complexity:
+Complexity: <complexity>
+
 Reason:
+- ...
+- ...
+
+Do NOT include the original code.
+Do NOT repeat the prompt.
+Do NOT add markdown.
 
 Code:
 
