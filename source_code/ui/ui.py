@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor, QFontMetrics
 
 from source_code.ui.console import ConsoleBox
 from source_code.ui.detachable_tab import DetachableTabWidget
@@ -92,6 +93,108 @@ except Exception as e:
             }
 
 
+class CodeEditor(QPlainTextEdit):
+    def __init__(self, parent=None, tab_spaces=4):
+        super().__init__(parent)
+
+        self.tab_spaces = tab_spaces
+        self.update_tab_width()
+
+    def update_tab_width(self):
+        space_width = QFontMetrics(self.font()).horizontalAdvance(" ")
+        self.setTabStopDistance(space_width * self.tab_spaces)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Tab:
+            self.insertPlainText(" " * self.tab_spaces)
+            return
+
+        if event.key() == Qt.Key_Backtab:
+            self.remove_indent()
+            return
+
+        super().keyPressEvent(event)
+
+    def remove_indent(self):
+        cursor = self.textCursor()
+
+        if cursor.hasSelection():
+            self.remove_indent_from_selection()
+            return
+
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+        cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor,
+            self.tab_spaces
+        )
+
+        selected = cursor.selectedText()
+        remove_count = 0
+
+        for ch in selected:
+            if ch == " ":
+                remove_count += 1
+            else:
+                break
+
+        if remove_count == 0:
+            return
+
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+
+        cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor,
+            remove_count
+        )
+
+        cursor.removeSelectedText()
+        self.setTextCursor(cursor)
+
+    def remove_indent_from_selection(self):
+        cursor = self.textCursor()
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+
+        cursor.setPosition(start)
+        start_block = cursor.blockNumber()
+
+        cursor.setPosition(end)
+        end_block = cursor.blockNumber()
+
+        cursor.beginEditBlock()
+
+        for block_number in range(start_block, end_block + 1):
+            block = self.document().findBlockByNumber(block_number)
+
+            if not block.isValid():
+                continue
+
+            text = block.text()
+            remove_count = 0
+
+            for ch in text[:self.tab_spaces]:
+                if ch == " ":
+                    remove_count += 1
+                else:
+                    break
+
+            if remove_count == 0:
+                continue
+
+            cursor.setPosition(block.position())
+            cursor.movePosition(
+                QTextCursor.MoveOperation.Right,
+                QTextCursor.MoveMode.KeepAnchor,
+                remove_count
+            )
+            cursor.removeSelectedText()
+
+        cursor.endEditBlock()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -120,10 +223,11 @@ class MainWindow(QMainWindow):
 
         self.create_top_bar()
 
-        self.editor = QPlainTextEdit()
+        self.editor = CodeEditor(tab_spaces=4)
         self.editor.setPlaceholderText("C++ 코드를 작성하세요.")
         self.editor.setPlainText(self.load_default_cpp_code())
         self.editor.setStyleSheet(editor_style())
+        self.editor.update_tab_width()
 
         self.console_box = ConsoleBox()
         self.console_box.setPlaceholderText(">>> 뒤에 입력값을 작성하고 Enter를 누르세요.")
@@ -134,12 +238,12 @@ class MainWindow(QMainWindow):
         self.terminal_box.setPlaceholderText("Build, Debug, 컴파일 메시지가 표시됩니다.")
         self.terminal_box.setStyleSheet(console_style())
 
-        upper_splitter = QSplitter(Qt.Horizontal)
+        upper_splitter = QSplitter(Qt.Orientation.Horizontal)
         upper_splitter.addWidget(self.create_editor_panel())
         upper_splitter.addWidget(self.create_feature_panel())
         upper_splitter.setSizes([900, 420])
 
-        main_splitter = QSplitter(Qt.Vertical)
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
         main_splitter.addWidget(upper_splitter)
         main_splitter.addWidget(self.create_bottom_panel())
         main_splitter.setSizes([580, 230])
@@ -180,11 +284,11 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.build_button)
         toolbar.addWidget(self.debug_button)
 
-        self.addToolBar(Qt.TopToolBarArea, toolbar)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
 
     def create_editor_panel(self):
         panel = QFrame()
-        panel.setFrameShape(QFrame.StyledPanel)
+        panel.setFrameShape(QFrame.Shape.StyledPanel)
         panel.setStyleSheet(panel_style())
 
         title = QLabel("Editor")
@@ -200,7 +304,7 @@ class MainWindow(QMainWindow):
 
     def create_feature_panel(self):
         panel = QFrame()
-        panel.setFrameShape(QFrame.StyledPanel)
+        panel.setFrameShape(QFrame.Shape.StyledPanel)
         panel.setMinimumWidth(360)
         panel.setStyleSheet(panel_style())
 
@@ -225,7 +329,7 @@ class MainWindow(QMainWindow):
 
     def create_bottom_panel(self):
         panel = QFrame()
-        panel.setFrameShape(QFrame.StyledPanel)
+        panel.setFrameShape(QFrame.Shape.StyledPanel)
         panel.setStyleSheet(panel_style())
 
         self.bottom_tabs = DetachableTabWidget(self)
@@ -283,7 +387,7 @@ class MainWindow(QMainWindow):
                 "새 파일",
                 "현재 코드를 지우고 새 파일을 만들까요?"
             )
-            if answer != QMessageBox.Yes:
+            if answer != QMessageBox.StandardButton.Yes:
                 return
 
         self.editor.clear()
