@@ -9,6 +9,5 @@ int main(){
     cin >> n;
 
     cout << n*n*n << "\n";
-    //asdfadsfkjhasdfh
     return 0;
 }

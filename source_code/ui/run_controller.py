@@ -41,12 +41,14 @@ class RunController:
         with open(self.run_cpp_path, "w", encoding="utf-8") as f:
             f.write(code)
 
-    def build(self, code: str) -> dict:
+    def compile(self, code: str) -> dict:
         if not code.strip():
             return {
                 "success": False,
-                "type": "build",
-                "message": "코드가 비어 있습니다."
+                "type": "compile",
+                "message": "코드가 비어 있습니다.",
+                "cpp_path": str(self.run_cpp_path),
+                "exe_path": str(self.run_exe_path)
             }
 
         self.save_editor_code(code)
@@ -58,22 +60,25 @@ class RunController:
 
         return {
             "success": compile_result.get("success", False),
-            "type": "build",
+            "type": "compile",
             "message": compile_result.get("message", ""),
             "cpp_path": str(self.run_cpp_path),
             "exe_path": str(self.run_exe_path)
         }
 
     def run(self, code: str, input_text: str, timeout: int = 2) -> dict:
-        build_result = self.build(code)
+        compile_result = self.compile(code)
 
-        if not build_result.get("success"):
+        if not compile_result.get("success"):
             return {
                 "success": False,
                 "type": "compile",
-                "message": build_result.get("message", ""),
-                "cpp_path": build_result.get("cpp_path", ""),
-                "exe_path": build_result.get("exe_path", "")
+                "message": compile_result.get("message", ""),
+                "stdout": "",
+                "stderr": "",
+                "execution_time": 0.0,
+                "cpp_path": compile_result.get("cpp_path", str(self.run_cpp_path)),
+                "exe_path": compile_result.get("exe_path", str(self.run_exe_path))
             }
 
         run_result = self.execution_manager.run_code(
@@ -85,6 +90,7 @@ class RunController:
         return {
             "success": run_result.get("success", False),
             "type": "run",
+            "message": "",
             "stdout": run_result.get("stdout", ""),
             "stderr": run_result.get("stderr", ""),
             "execution_time": run_result.get("execution_time", 0.0),
@@ -97,24 +103,30 @@ class RunController:
 
         debug_message = [
             "[Debug Info]",
-            f"source file: {self.run_cpp_path}",
-            f"executable: {self.run_exe_path}",
+            "",
+            f"source file: {result.get('cpp_path', str(self.run_cpp_path))}",
+            f"executable: {result.get('exe_path', str(self.run_exe_path))}",
             f"input: {repr(input_text)}",
+            f"result type: {result.get('type')}",
             f"success: {result.get('success')}",
-            f"type: {result.get('type')}",
-            f"execution_time: {result.get('execution_time', 0.0)}s",
+            f"execution time: {result.get('execution_time', 0.0)}s",
         ]
 
         if result.get("type") == "compile":
-            debug_message.append("\n[Compile Message]")
+            debug_message.append("")
+            debug_message.append("[Compile Message]")
             debug_message.append(result.get("message", ""))
 
-        else:
-            debug_message.append("\n[stdout]")
-            debug_message.append(result.get("stdout", ""))
+        elif result.get("type") == "run":
+            debug_message.append("")
+            debug_message.append("[stdout]")
+            stdout = result.get("stdout", "")
+            debug_message.append(stdout if stdout else "(empty)")
 
-            debug_message.append("\n[stderr]")
-            debug_message.append(result.get("stderr", ""))
+            debug_message.append("")
+            debug_message.append("[stderr]")
+            stderr = result.get("stderr", "")
+            debug_message.append(stderr if stderr else "(empty)")
 
         return {
             **result,
