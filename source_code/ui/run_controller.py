@@ -47,6 +47,9 @@ class RunController:
                 "success": False,
                 "type": "compile",
                 "message": "코드가 비어 있습니다.",
+                "stdout": "",
+                "stderr": "",
+                "execution_time": 0.0,
                 "cpp_path": str(self.run_cpp_path),
                 "exe_path": str(self.run_exe_path)
             }
@@ -59,9 +62,12 @@ class RunController:
         )
 
         return {
-            "success": compile_result.get("success", False),
+            "success": bool(compile_result.get("success", False)),
             "type": "compile",
-            "message": compile_result.get("message", ""),
+            "message": self.safe_text(compile_result.get("message", "")),
+            "stdout": "",
+            "stderr": "",
+            "execution_time": 0.0,
             "cpp_path": str(self.run_cpp_path),
             "exe_path": str(self.run_exe_path)
         }
@@ -70,16 +76,7 @@ class RunController:
         compile_result = self.compile(code)
 
         if not compile_result.get("success"):
-            return {
-                "success": False,
-                "type": "compile",
-                "message": compile_result.get("message", ""),
-                "stdout": "",
-                "stderr": "",
-                "execution_time": 0.0,
-                "cpp_path": compile_result.get("cpp_path", str(self.run_cpp_path)),
-                "exe_path": compile_result.get("exe_path", str(self.run_exe_path))
-            }
+            return compile_result
 
         run_result = self.execution_manager.run_code(
             str(self.run_exe_path),
@@ -88,18 +85,22 @@ class RunController:
         )
 
         return {
-            "success": run_result.get("success", False),
+            "success": bool(run_result.get("success", False)),
             "type": "run",
             "message": "",
-            "stdout": run_result.get("stdout", ""),
-            "stderr": run_result.get("stderr", ""),
-            "execution_time": run_result.get("execution_time", 0.0),
+            "stdout": self.safe_text(run_result.get("stdout", "")),
+            "stderr": self.safe_text(run_result.get("stderr", "")),
+            "execution_time": run_result.get("execution_time", 0.0) or 0.0,
             "cpp_path": str(self.run_cpp_path),
             "exe_path": str(self.run_exe_path)
         }
 
     def debug(self, code: str, input_text: str, timeout: int = 2) -> dict:
         result = self.run(code, input_text, timeout)
+
+        stdout = self.safe_text(result.get("stdout", ""))
+        stderr = self.safe_text(result.get("stderr", ""))
+        message = self.safe_text(result.get("message", ""))
 
         debug_message = [
             "[Debug Info]",
@@ -115,20 +116,24 @@ class RunController:
         if result.get("type") == "compile":
             debug_message.append("")
             debug_message.append("[Compile Message]")
-            debug_message.append(result.get("message", ""))
+            debug_message.append(message if message else "(empty)")
 
         elif result.get("type") == "run":
             debug_message.append("")
             debug_message.append("[stdout]")
-            stdout = result.get("stdout", "")
             debug_message.append(stdout if stdout else "(empty)")
 
             debug_message.append("")
             debug_message.append("[stderr]")
-            stderr = result.get("stderr", "")
             debug_message.append(stderr if stderr else "(empty)")
 
         return {
             **result,
             "debug_message": "\n".join(debug_message)
         }
+
+    def safe_text(self, value):
+        if value is None:
+            return ""
+
+        return str(value)

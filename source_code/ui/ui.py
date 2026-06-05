@@ -1,4 +1,6 @@
 import sys
+import time
+import shutil
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parents[2]
@@ -21,7 +23,7 @@ from PySide6.QtWidgets import (
     QToolBar,
     QStatusBar,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QProcess, QProcessEnvironment
 
 from source_code.ui.console import ConsoleBox
 from source_code.ui.detachable_tab import DetachableTabWidget
@@ -81,6 +83,10 @@ class MainWindow(QMainWindow):
         self.current_file_path = None
         self.floating_windows = []
 
+        self.process = None
+        self.process_running = False
+        self.process_start_time = 0.0
+
         self.ui_dir = Path(__file__).resolve().parent
         self.source_code_dir = self.ui_dir.parent
 
@@ -102,7 +108,7 @@ class MainWindow(QMainWindow):
         self.editor.setStyleSheet(editor_style())
 
         self.console_box = ConsoleBox()
-        self.console_box.setPlaceholderText(">>> 뒤에 입력값을 작성하고 Enter를 누르세요.")
+        self.console_box.setPlaceholderText("Enter: 입력 전송 / Shift+Enter: 줄바꿈")
         self.console_box.setStyleSheet(console_style())
 
         self.terminal_box = QTextEdit()
@@ -250,6 +256,10 @@ class MainWindow(QMainWindow):
         self.clear_console_button.clicked.connect(self.clear_console)
 
     def new_file(self):
+        if self.process_running:
+            QMessageBox.warning(self, "실행 중", "프로그램 실행 중에는 새 파일을 만들 수 없습니다.")
+            return
+
         if self.editor.toPlainText().strip():
             answer = QMessageBox.question(
                 self,
@@ -264,6 +274,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("새 파일을 만들었습니다.")
 
     def open_cpp_file(self):
+        if self.process_running:
+            QMessageBox.warning(self, "실행 중", "프로그램 실행 중에는 파일을 열 수 없습니다.")
+            return
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "C++ 파일 열기",
@@ -362,6 +376,9 @@ class MainWindow(QMainWindow):
                 "success": False,
                 "type": "compile",
                 "message": compile_result.get("message", ""),
+                "stdout": "",
+                "stderr": "",
+                "execution_time": 0.0,
                 "cpp_path": compile_result.get("cpp_path", ""),
                 "exe_path": compile_result.get("exe_path", "")
             }
@@ -375,12 +392,131 @@ class MainWindow(QMainWindow):
         return {
             "success": run_result.get("success", False),
             "type": "run",
-            "stdout": run_result.get("stdout", ""),
-            "stderr": run_result.get("stderr", ""),
-            "execution_time": run_result.get("execution_time", 0.0),
+            "message": "",
+            "stdout": run_result.get("stdout", "") or "",
+            "stderr": run_result.get("stderr", "") or "",
+            "execution_time": run_result.get("execution_time", 0.0) or 0.0,
             "cpp_path": str(self.run_cpp_path),
             "exe_path": str(self.run_exe_path)
         }
+
+    def run_code_from_console(self, line_text=None):
+        if self.process_running:
+            self.send_input_to_process(line_text)
+            return
+
+        if line_text is None:
+            input_text = self.console_box.get_current_input()
+            self.console_box.ensure_newline()
+        else:
+            input_text = line_text
+
+        self.start_interactive_run(input_text)
+
+    def start_interactive_run(self, first_input):
+        code = self.editor.toPlainText()
+
+        if not code.strip():
+            QMessageBox.warning(self, "실행 불가", "코드가 비어 있습니다.")
+            self.console_box.append_prompt()
+            return
+
+        compile_result = self.compile_current_editor_code()
+
+        if not compile_result.get("success"):
+            self.console_box.append_output("[Compile Error]\n" + compile_result.get("message", ""))
+            return
+
+        self.bottom_tabs.setCurrentIndex(0)
+
+        self.process = QProcess(self)
+        self.process.setProcessEnvironment(self.create_process_environment())
+
+        self.process.readyReadStandardOutput.connect(self.handle_process_stdout)
+        self.process.readyReadStandardError.connect(self.handle_process_stderr)
+        self.process.finished.connect(self.handle_process_finished)
+        self.process.errorOccurred.connect(self.handle_process_error)
+
+        self.process_start_time = time.perf_counter()
+        self.process_running = True
+
+        self.process.start(str(self.run_exe_path))
+
+        if not self.process.waitForStarted(1000):
+            self.process_running = False
+            self.console_box.append_output("[Run Error]\n실행 파일을 시작하지 못했습니다.")
+            self.process = None
+            return
+
+        self.send_input_to_process(first_input)
+
+    def create_process_environment(self):
+        env = QProcessEnvironment.systemEnvironment()
+
+        compiler_name = getattr(self.execution_manager, "compiler", "g++")
+        compiler_path = shutil.which(compiler_name)
+
+        if compiler_path:
+            compiler_bin = str(Path(compiler_path).parent)
+            old_path = env.value("PATH")
+            env.insert("PATH", compiler_bin + ";" + old_path)
+
+        return env
+
+    def send_input_to_process(self, text):
+        if not self.process or not self.process_running:
+            self.console_box.append_output("[Input Error]\n실행 중인 프로그램이 없습니다.")
+            return
+
+        if text is None:
+            text = ""
+
+        text = str(text)
+
+        if text and not text.endswith("\n"):
+            text += "\n"
+
+        if not text:
+            text = "\n"
+
+        self.process.write(text.encode("utf-8"))
+
+    def handle_process_stdout(self):
+        if not self.process:
+            return
+
+        data = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        self.console_box.append_process_output(data)
+
+    def handle_process_stderr(self):
+        if not self.process:
+            return
+
+        data = bytes(self.process.readAllStandardError()).decode("utf-8", errors="replace")
+        self.console_box.append_process_output(data)
+
+    def handle_process_finished(self, exit_code, exit_status):
+        elapsed = round(time.perf_counter() - self.process_start_time, 6)
+
+        if exit_code != 0:
+            self.console_box.append_process_output(f"\n[Runtime Error] exit code: {exit_code}\n")
+
+        self.console_box.append_process_output(f"[실행 시간] {elapsed}s\n")
+        self.console_box.append_prompt()
+
+        self.process_running = False
+
+        if self.process:
+            self.process.deleteLater()
+            self.process = None
+
+    def handle_process_error(self, error):
+        self.process_running = False
+        self.console_box.append_output("[Process Error]\n" + str(error))
+
+        if self.process:
+            self.process.deleteLater()
+            self.process = None
 
     def debug_code(self):
         self.bottom_tabs.setCurrentIndex(1)
@@ -396,6 +532,10 @@ class MainWindow(QMainWindow):
         try:
             result = self.run_current_editor_code(input_text)
 
+            stdout = result.get("stdout", "") or ""
+            stderr = result.get("stderr", "") or ""
+            message = result.get("message", "") or ""
+
             lines = []
             lines.append("[Debug Info]")
             lines.append("")
@@ -409,51 +549,27 @@ class MainWindow(QMainWindow):
             if result.get("type") == "compile":
                 lines.append("")
                 lines.append("[Compile Message]")
-                lines.append(result.get("message", ""))
+                lines.append(message if message else "(empty)")
 
             elif result.get("type") == "run":
                 lines.append("")
                 lines.append("[stdout]")
-                stdout = result.get("stdout", "")
                 lines.append(stdout if stdout else "(empty)")
 
                 lines.append("")
                 lines.append("[stderr]")
-                stderr = result.get("stderr", "")
                 lines.append(stderr if stderr else "(empty)")
 
-            self.terminal_box.setPlainText("\n".join(lines))
+            self.terminal_box.setPlainText("\n".join(str(x) for x in lines))
 
         except Exception as e:
             self.terminal_box.setPlainText("[Debug Error]\n\n" + str(e))
 
-    def run_code_from_console(self):
-        code = self.editor.toPlainText()
-        input_text = self.console_box.get_current_input()
-
-        if not code.strip():
-            QMessageBox.warning(self, "실행 불가", "코드가 비어 있습니다.")
-            return
-
-        self.bottom_tabs.setCurrentIndex(0)
-
-        try:
-            result = self.run_current_editor_code(input_text)
-
-            if result.get("type") == "compile":
-                self.console_box.append_output("[Compile Error]\n" + result.get("message", ""))
-                return
-
-            self.append_run_result(result)
-
-        except Exception as e:
-            self.console_box.append_output("[UI Error]\n" + str(e))
-
     def append_run_result(self, result):
         success = result.get("success", False)
-        stdout = result.get("stdout", "")
-        stderr = result.get("stderr", "")
-        execution_time = result.get("execution_time", 0.0)
+        stdout = result.get("stdout", "") or ""
+        stderr = result.get("stderr", "") or ""
+        execution_time = result.get("execution_time", 0.0) or 0.0
 
         if success:
             output = stdout.strip()
@@ -461,18 +577,28 @@ class MainWindow(QMainWindow):
             if not output:
                 output = "(출력 없음)"
 
-            self.append_console(output)
-            self.append_console(f"[실행 시간] {execution_time}s")
+            text = output
+            text += f"\n[실행 시간] {execution_time}s"
+
+            self.append_console(text)
 
         else:
             error_text = stderr.strip() if stderr else "실행 중 오류가 발생했습니다."
-            self.append_console("[Runtime Error]\n" + error_text)
-            self.append_console(f"[실행 시간] {execution_time}s")
+
+            text = "[Runtime Error]\n"
+            text += error_text
+            text += f"\n[실행 시간] {execution_time}s"
+
+            self.append_console(text)
 
     def append_console(self, text):
         self.console_box.append_output(text)
 
     def clear_console(self):
+        if self.process_running:
+            QMessageBox.warning(self, "실행 중", "프로그램 실행 중에는 콘솔을 지울 수 없습니다.")
+            return
+
         self.console_box.reset_console()
 
     def run_current_testcase(self):
