@@ -48,7 +48,9 @@ from source_code.ui.ui_styles import (
 
 try:
     from source_code.src.core.execution_manager import ExecutionManager
-except Exception:
+except Exception as e:
+    IMPORT_ERROR_MESSAGE = str(e)
+
     class ExecutionManager:
         def __init__(self, compiler="g++"):
             self.compiler = compiler
@@ -56,14 +58,14 @@ except Exception:
         def compile_code(self, cpp_path: str, output_path: str) -> dict:
             return {
                 "success": False,
-                "message": "ExecutionManager를 불러오지 못했습니다."
+                "message": "ExecutionManager를 불러오지 못했습니다.\n" + IMPORT_ERROR_MESSAGE
             }
 
         def run_code(self, executable_path: str, stdin_data: str = "", timeout: int = 2) -> dict:
             return {
                 "success": False,
                 "stdout": "",
-                "stderr": "ExecutionManager를 불러오지 못했습니다.",
+                "stderr": "ExecutionManager를 불러오지 못했습니다.\n" + IMPORT_ERROR_MESSAGE,
                 "execution_time": 0.0
             }
 
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
 
         self.ui_dir = Path(__file__).resolve().parent
         self.source_code_dir = self.ui_dir.parent
+
         self.default_cpp_path = self.source_code_dir / "src" / "temp" / "main.cpp"
         self.run_cpp_path = self.source_code_dir / "src" / "temp" / "editor_run.cpp"
         self.run_exe_path = self.source_code_dir / "src" / "temp" / "editor_run.exe"

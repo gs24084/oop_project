@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCursor
 
 
 class ConsoleBox(QTextEdit):
@@ -11,7 +12,7 @@ class ConsoleBox(QTextEdit):
         self.setPlainText(self.prompt)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Return and not (event.modifiers() & Qt.ShiftModifier):
+        if event.key() == Qt.Key_Return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
             if self.run_callback:
                 self.run_callback()
             return
@@ -34,7 +35,7 @@ class ConsoleBox(QTextEdit):
 
     def append_output(self, text):
         cursor = self.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         self.setTextCursor(cursor)
 
         current = self.toPlainText()
@@ -48,8 +49,11 @@ class ConsoleBox(QTextEdit):
         self.insertPlainText(self.prompt)
 
         cursor = self.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         self.setTextCursor(cursor)
 
     def reset_console(self):
         self.setPlainText(self.prompt)
+        cursor = self.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.setTextCursor(cursor)
