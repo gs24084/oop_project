@@ -70,6 +70,28 @@ except Exception as e:
             }
 
 
+try:
+    from source_code.src.core.complexity_analyzer import ComplexityAnalyzer
+except Exception as e:
+    COMPLEXITY_IMPORT_ERROR = str(e)
+
+    class ComplexityAnalyzer:
+        def __init__(self, use_ollama=False, model="qwen3:0.6b"):
+            self.use_ollama = use_ollama
+            self.model = model
+
+        def analyze(self, code: str) -> dict:
+            return {
+                "static": {
+                    "complexity": "분석 불가",
+                    "evidence": [
+                        "ComplexityAnalyzer를 불러오지 못했습니다.",
+                        COMPLEXITY_IMPORT_ERROR
+                    ]
+                }
+            }
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -78,6 +100,8 @@ class MainWindow(QMainWindow):
         self.resize(1350, 850)
 
         self.execution_manager = ExecutionManager()
+        self.complexity_analyzer = ComplexityAnalyzer(use_ollama=False)
+
         self.current_file_path = None
         self.floating_windows = []
 
@@ -496,15 +520,48 @@ class MainWindow(QMainWindow):
     def analyze_complexity(self):
         code = self.editor.toPlainText()
 
-        for_count = code.count("for")
-        while_count = code.count("while")
+        if not code.strip():
+            self.complexity_result.setPlainText("분석할 코드가 없습니다.")
+            return
 
-        self.complexity_result.setPlainText(
-            "임시 시간복잡도 분석 결과\n\n"
-            f"for 개수: {for_count}\n"
-            f"while 개수: {while_count}\n\n"
-            "정확한 분석은 추후 연결할 예정입니다."
-        )
+        try:
+            result = self.complexity_analyzer.analyze(code)
+
+            static_result = result.get("static", {})
+            complexity = static_result.get("complexity", "알 수 없음")
+            evidence = static_result.get("evidence", [])
+
+            lines = []
+            lines.append("[시간복잡도 분석 결과]")
+            lines.append("")
+            lines.append(f"추정 시간복잡도: {complexity}")
+            lines.append("")
+            lines.append("[근거]")
+
+            if evidence:
+                for item in evidence:
+                    lines.append(f"- {item}")
+            else:
+                lines.append("- 근거 없음")
+
+            if "ollama" in result:
+                ollama_result = result["ollama"]
+
+                lines.append("")
+                lines.append("[Ollama 분석 결과]")
+
+                if ollama_result.get("success"):
+                    lines.append(ollama_result.get("response", ""))
+                else:
+                    lines.append("Ollama 분석 실패")
+                    lines.append(ollama_result.get("response", ""))
+
+            self.complexity_result.setPlainText("\n".join(lines))
+
+        except Exception as e:
+            self.complexity_result.setPlainText(
+                "[시간복잡도 분석 오류]\n\n" + str(e)
+            )
 
     def insert_basic_template(self):
         self.editor.setPlainText(default_cpp_code())
