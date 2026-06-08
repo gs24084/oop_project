@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 
 from source_code.ui.console import ConsoleBox
 from source_code.ui.code_editor import CodeEditor
@@ -48,6 +49,7 @@ from source_code.ui.file_controller import FileController
 from source_code.ui.execution_controller import ExecutionController
 from source_code.ui.complexity_controller import ComplexityController
 from source_code.ui.testcase_controller import TestCaseController
+from source_code.ui.graph_controller import GraphController
 
 
 class MainWindow(QMainWindow):
@@ -67,6 +69,7 @@ class MainWindow(QMainWindow):
         self.execution_controller = ExecutionController(self.source_code_dir)
         self.complexity_controller = ComplexityController(use_ollama=True)
         self.testcase_controller = TestCaseController(self.execution_controller)
+        self.graph_controller = GraphController(self.source_code_dir)
 
         self.init_ui()
         self.init_controllers()
@@ -240,6 +243,8 @@ class MainWindow(QMainWindow):
         self.clear_testcase_button.clicked.connect(self.clear_testcases)
 
         self.graph_button.clicked.connect(self.analyze_graph)
+        self.graph_clear_button.clicked.connect(self.clear_graph_input)
+
         self.complexity_button.clicked.connect(self.analyze_complexity)
 
         self.basic_template_button.clicked.connect(self.insert_basic_template)
@@ -478,21 +483,40 @@ class MainWindow(QMainWindow):
         self.refresh_testcase_list()
 
     def analyze_graph(self):
-        text = self.graph_input.toPlainText().strip()
+        edge_text = self.graph_input.toPlainText()
+        directed = self.graph_directed_checkbox.isChecked()
+        show_edge_weight = self.graph_edge_weight_checkbox.isChecked()
 
-        if not text:
-            self.graph_result.setPlainText("그래프 입력이 비어 있습니다.")
-            return
-
-        lines = text.splitlines()
-        edge_count = max(0, len(lines) - 1)
-
-        self.graph_result.setPlainText(
-            "임시 그래프 분석 결과\n\n"
-            f"입력 줄 수: {len(lines)}\n"
-            f"간선 정보로 추정되는 줄 수: {edge_count}\n\n"
-            "실제 시각화 기능은 추후 연결 예정입니다."
+        result = self.graph_controller.visualize_graph(
+            edge_text=edge_text,
+            directed=directed,
+            show_edge_weight=show_edge_weight
         )
+
+        self.graph_result.setPlainText(result.get("message", ""))
+
+        if result.get("success") and result.get("image_path"):
+            pixmap = QPixmap(result["image_path"])
+
+            if not pixmap.isNull():
+                scaled_pixmap = pixmap.scaled(
+                    self.graph_image_label.width(),
+                    self.graph_image_label.height(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+
+                self.graph_image_label.setPixmap(scaled_pixmap)
+                return
+
+        self.graph_image_label.setText("그래프 이미지를 표시할 수 없습니다.")
+        self.graph_image_label.setPixmap(QPixmap())
+
+    def clear_graph_input(self):
+        self.graph_input.clear()
+        self.graph_result.clear()
+        self.graph_image_label.clear()
+        self.graph_image_label.setText("그래프 이미지가 여기에 표시됩니다.")
 
     def analyze_complexity(self):
         code = self.editor.toPlainText()
