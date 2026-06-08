@@ -60,28 +60,71 @@ int main(){
 }
 """
 
-
-def dp_cpp_code():
+def dijk_cpp_code():
     return """#include <bits/stdc++.h>
 using namespace std;
 
-int main(){
+using ll = long long;
+const ll INF = 1e18;
+
+int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    int n;
-    cin >> n;
+    int n, m;
+    cin >> n >> m;
 
-    vector<int> dp(n + 1, 0);
+    vector<vector<pair<int, ll>>> graph(n + 1);
 
-    dp[0] = 1;
+    for (int i = 0; i < m; i++) {
+        int u, v;
+        ll w;
+        cin >> u >> v >> w;
 
-    for(int i = 1; i <= n; i++){
-        dp[i] = dp[i - 1];
+        graph[u].push_back({v, w});
+
+        // 무방향 그래프라면 아래도 추가
+        // graph[v].push_back({u, w});
     }
 
-    cout << dp[n] << "\\n";
+    int start;
+    cin >> start;
+
+    vector<ll> dist(n + 1, INF);
+
+    priority_queue<
+        pair<ll, int>,
+        vector<pair<ll, int>>,
+        greater<pair<ll, int>>
+    > pq;
+
+    dist[start] = 0;
+    pq.push({0, start});
+
+    while (!pq.empty()) {
+        auto [curDist, now] = pq.top();
+        pq.pop();
+
+        if (curDist != dist[now]) continue;
+
+        for (auto [next, cost] : graph[now]) {
+            if (dist[next] > dist[now] + cost) {
+                dist[next] = dist[now] + cost;
+                pq.push({dist[next], next});
+            }
+        }
+    }
+
+    for (int i = 1; i <= n; i++) {
+        if (dist[i] == INF) cout << "INF\n";
+        else cout << dist[i] << '\n';
+    }
 
     return 0;
 }
+"""
+
+def dp_cpp_code():
+    return """
+    
 """
