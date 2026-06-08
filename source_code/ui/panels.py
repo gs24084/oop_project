@@ -108,7 +108,9 @@ def create_graph_tab(parent):
     description = QLabel(
         "간선 입력 형식\n"
         "- 간선 가중치 없음: u v\n"
-        "- 간선 가중치 있음: u v w"
+        "- 간선 가중치 있음: u v w\n\n"
+        "정점 가중치 입력 형식\n"
+        "- 정점 가중치"
     )
     description.setWordWrap(True)
 
@@ -129,10 +131,22 @@ def create_graph_tab(parent):
 
     parent.graph_directed_checkbox = QCheckBox("유향 그래프")
     parent.graph_edge_weight_checkbox = QCheckBox("간선 가중치")
+    parent.graph_node_weight_checkbox = QCheckBox("정점 가중치")
 
     option_layout.addWidget(parent.graph_directed_checkbox)
     option_layout.addWidget(parent.graph_edge_weight_checkbox)
+    option_layout.addWidget(parent.graph_node_weight_checkbox)
     option_layout.addStretch()
+
+    parent.graph_node_weight_input = QTextEdit()
+    parent.graph_node_weight_input.setPlaceholderText(
+        "정점 가중치 입력 예시\n"
+        "1 10\n"
+        "2 5\n"
+        "3 7"
+    )
+    parent.graph_node_weight_input.setStyleSheet(small_box_style())
+    parent.graph_node_weight_input.setMinimumHeight(80)
 
     button_layout = QHBoxLayout()
 
@@ -170,6 +184,10 @@ def create_graph_tab(parent):
     layout.addWidget(parent.graph_input)
 
     layout.addLayout(option_layout)
+
+    layout.addWidget(QLabel("정점 가중치 입력"))
+    layout.addWidget(parent.graph_node_weight_input)
+
     layout.addLayout(button_layout)
 
     layout.addWidget(QLabel("그래프 정보"))
@@ -218,12 +236,14 @@ def create_template_tab(parent):
 
     parent.basic_template_button = QPushButton("기본 C++ 템플릿")
     parent.graph_template_button = QPushButton("그래프 BFS 템플릿")
+    parent.dijk_template_button = QPushButton("다익스트라 템플릿")
     parent.dp_template_button = QPushButton("DP 템플릿")
     parent.clear_console_button = QPushButton("콘솔 지우기")
 
     layout.addWidget(label)
     layout.addWidget(parent.basic_template_button)
     layout.addWidget(parent.graph_template_button)
+    layout.addWidget(parent.dijk_template_button)
     layout.addWidget(parent.dp_template_button)
     layout.addWidget(parent.clear_console_button)
     layout.addStretch()

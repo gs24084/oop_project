@@ -34,6 +34,7 @@ from source_code.ui.panels import (
 from source_code.ui.cpp_templates import (
     default_cpp_code,
     graph_cpp_code,
+    dijk_cpp_code,
     dp_cpp_code,
 )
 from source_code.ui.ui_styles import (
@@ -249,6 +250,7 @@ class MainWindow(QMainWindow):
 
         self.basic_template_button.clicked.connect(self.insert_basic_template)
         self.graph_template_button.clicked.connect(self.insert_graph_template)
+        self.dijk_template_button.clicked.connect(self.insert_dijk_template)
         self.dp_template_button.clicked.connect(self.insert_dp_template)
         self.clear_console_button.clicked.connect(self.clear_console)
 
@@ -484,13 +486,18 @@ class MainWindow(QMainWindow):
 
     def analyze_graph(self):
         edge_text = self.graph_input.toPlainText()
+        node_weight_text = self.graph_node_weight_input.toPlainText()
+
         directed = self.graph_directed_checkbox.isChecked()
         show_edge_weight = self.graph_edge_weight_checkbox.isChecked()
+        show_node_weight = self.graph_node_weight_checkbox.isChecked()
 
         result = self.graph_controller.visualize_graph(
             edge_text=edge_text,
             directed=directed,
-            show_edge_weight=show_edge_weight
+            show_edge_weight=show_edge_weight,
+            show_node_weight=show_node_weight,
+            node_weight_text=node_weight_text
         )
 
         self.graph_result.setPlainText(result.get("message", ""))
@@ -514,6 +521,7 @@ class MainWindow(QMainWindow):
 
     def clear_graph_input(self):
         self.graph_input.clear()
+        self.graph_node_weight_input.clear()
         self.graph_result.clear()
         self.graph_image_label.clear()
         self.graph_image_label.setText("그래프 이미지가 여기에 표시됩니다.")
@@ -528,6 +536,9 @@ class MainWindow(QMainWindow):
 
     def insert_graph_template(self):
         self.editor.setPlainText(graph_cpp_code())
+
+    def insert_dijk_template(self):
+        self.editor.setPlainText(dijk_cpp_code())
 
     def insert_dp_template(self):
         self.editor.setPlainText(dp_cpp_code())

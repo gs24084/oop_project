@@ -38,7 +38,9 @@ class GraphController:
         self,
         edge_text: str,
         directed: bool = False,
-        show_edge_weight: bool = False
+        show_edge_weight: bool = False,
+        show_node_weight: bool = False,
+        node_weight_text: str = ""
     ) -> dict:
         if not edge_text.strip():
             return {
@@ -59,17 +61,26 @@ class GraphController:
                 show_edge_weight=show_edge_weight
             )
 
+            node_weights = self.parse_node_weights(node_weight_text)
+
+            if show_node_weight:
+                self.validate_node_weights(graph, node_weights)
+
             image_path = self.save_graph_image(
                 graph=graph,
                 directed=directed,
-                show_edge_weight=show_edge_weight
+                show_edge_weight=show_edge_weight,
+                show_node_weight=show_node_weight,
+                node_weights=node_weights
             )
 
             message = self.format_graph_info(
                 graph=graph,
                 edges=edges,
                 directed=directed,
-                show_edge_weight=show_edge_weight
+                show_edge_weight=show_edge_weight,
+                show_node_weight=show_node_weight,
+                node_weights=node_weights
             )
 
             return {
@@ -85,11 +96,53 @@ class GraphController:
                 "image_path": None
             }
 
+    def parse_node_weights(self, text: str) -> dict:
+        node_weights = {}
+
+        if not text.strip():
+            return node_weights
+
+        lines = text.strip().splitlines()
+
+        for line_number, line in enumerate(lines, start=1):
+            line = line.strip()
+
+            if not line:
+                continue
+
+            parts = line.split()
+
+            if len(parts) != 2:
+                raise ValueError(
+                    f"{line_number}번째 정점 가중치 형식이 잘못되었습니다.\n"
+                    "정점 가중치 입력 형식은 '정점 가중치' 입니다.\n"
+                    f"문제 줄: {line}"
+                )
+
+            node, weight = parts
+            node_weights[int(node)] = weight
+
+        return node_weights
+
+    def validate_node_weights(self, graph, node_weights: dict):
+        if not node_weights:
+            return
+
+        graph_nodes = set(graph.nodes())
+
+        for node in node_weights:
+            if node not in graph_nodes:
+                raise ValueError(
+                    f"정점 가중치에 등장한 정점 {node}가 그래프에 존재하지 않습니다."
+                )
+
     def save_graph_image(
         self,
         graph,
         directed: bool,
-        show_edge_weight: bool
+        show_edge_weight: bool,
+        show_node_weight: bool,
+        node_weights: dict
     ) -> Path:
         try:
             import matplotlib
@@ -118,7 +171,15 @@ class GraphController:
         labels = {}
 
         for node in graph.nodes():
-            labels[node] = str(node)
+            if show_node_weight:
+                weight = node_weights.get(node, "")
+
+                if weight:
+                    labels[node] = f"{node}\n({weight})"
+                else:
+                    labels[node] = str(node)
+            else:
+                labels[node] = str(node)
 
         nx.draw(
             graph,
@@ -163,7 +224,9 @@ class GraphController:
         graph,
         edges,
         directed: bool,
-        show_edge_weight: bool
+        show_edge_weight: bool,
+        show_node_weight: bool,
+        node_weights: dict
     ) -> str:
         lines = []
 
@@ -171,11 +234,12 @@ class GraphController:
         lines.append("")
         lines.append(f"그래프 종류: {'유향 그래프' if directed else '무향 그래프'}")
         lines.append(f"간선 가중치: {'사용' if show_edge_weight else '사용 안 함'}")
-        lines.append(f"노드 수: {graph.number_of_nodes()}")
+        lines.append(f"정점 가중치: {'표시' if show_node_weight else '표시 안 함'}")
+        lines.append(f"정점 수: {graph.number_of_nodes()}")
         lines.append(f"간선 수: {graph.number_of_edges()}")
         lines.append("")
 
-        lines.append("[노드 목록]")
+        lines.append("[정점 목록]")
         nodes = sorted(list(graph.nodes()))
         lines.append(", ".join(map(str, nodes)))
         lines.append("")
@@ -189,5 +253,14 @@ class GraphController:
         else:
             for u, v in edges:
                 lines.append(f"{u} {arrow} {v}")
+
+        if show_node_weight:
+            lines.append("")
+            lines.append("[정점 가중치]")
+            if node_weights:
+                for node, weight in sorted(node_weights.items()):
+                    lines.append(f"{node}: {weight}")
+            else:
+                lines.append("입력된 정점 가중치가 없습니다.")
 
         return "\n".join(lines)

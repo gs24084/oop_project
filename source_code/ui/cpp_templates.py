@@ -60,6 +60,7 @@ int main(){
 }
 """
 
+
 def dijk_cpp_code():
     return """#include <bits/stdc++.h>
 using namespace std;
@@ -67,7 +68,7 @@ using namespace std;
 using ll = long long;
 const ll INF = 1e18;
 
-int main() {
+int main(){
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
@@ -76,7 +77,7 @@ int main() {
 
     vector<vector<pair<int, ll>>> graph(n + 1);
 
-    for (int i = 0; i < m; i++) {
+    for(int i = 0; i < m; i++){
         int u, v;
         ll w;
         cin >> u >> v >> w;
@@ -101,30 +102,51 @@ int main() {
     dist[start] = 0;
     pq.push({0, start});
 
-    while (!pq.empty()) {
+    while(!pq.empty()){
         auto [curDist, now] = pq.top();
         pq.pop();
 
-        if (curDist != dist[now]) continue;
+        if(curDist != dist[now]) continue;
 
-        for (auto [next, cost] : graph[now]) {
-            if (dist[next] > dist[now] + cost) {
+        for(auto [next, cost] : graph[now]){
+            if(dist[next] > dist[now] + cost){
                 dist[next] = dist[now] + cost;
                 pq.push({dist[next], next});
             }
         }
     }
 
-    for (int i = 1; i <= n; i++) {
-        if (dist[i] == INF) cout << "INF\n";
-        else cout << dist[i] << '\n';
+    for(int i = 1; i <= n; i++){
+        if(dist[i] == INF) cout << "INF\\n";
+        else cout << dist[i] << '\\n';
     }
 
     return 0;
 }
 """
 
+
 def dp_cpp_code():
-    return """
-    
+    return """#include <bits/stdc++.h>
+using namespace std;
+
+int main(){
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int n;
+    cin >> n;
+
+    vector<long long> dp(n + 1, 0);
+
+    dp[0] = 1;
+
+    for(int i = 1; i <= n; i++){
+        dp[i] = dp[i - 1];
+    }
+
+    cout << dp[n] << "\\n";
+
+    return 0;
+}
 """
