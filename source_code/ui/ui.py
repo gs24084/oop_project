@@ -133,7 +133,6 @@ class MainWindow(QMainWindow):
         self.new_button = QPushButton("새 파일")
         self.open_button = QPushButton("열기")
         self.save_button = QPushButton("저장")
-        self.setting_button = QPushButton("설정")
 
         self.run_button = QPushButton("실행")
         self.build_button = QPushButton("Build")
@@ -142,7 +141,6 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.new_button)
         toolbar.addWidget(self.open_button)
         toolbar.addWidget(self.save_button)
-        toolbar.addWidget(self.setting_button)
 
         spacer = QWidget()
         spacer.setFixedWidth(380)
@@ -229,7 +227,6 @@ class MainWindow(QMainWindow):
         self.new_button.clicked.connect(self.new_file)
         self.open_button.clicked.connect(self.open_cpp_file)
         self.save_button.clicked.connect(self.save_cpp_file)
-        self.setting_button.clicked.connect(self.show_setting_message)
 
         self.run_button.clicked.connect(self.run_code_from_console)
         self.build_button.clicked.connect(self.build_code)
@@ -542,10 +539,3 @@ class MainWindow(QMainWindow):
 
     def insert_dp_template(self):
         self.editor.setPlainText(dp_cpp_code())
-
-    def show_setting_message(self):
-        QMessageBox.information(
-            self,
-            "설정",
-            "설정 기능은 추후 추가할 예정입니다."
-        )
