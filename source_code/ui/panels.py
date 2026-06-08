@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QVBoxLayout,
+    QHBoxLayout,
+    QListWidget,
 )
 
 from source_code.ui.ui_styles import small_box_style
@@ -32,16 +34,36 @@ def create_testcase_tab(parent):
     parent.expected_output.setPlaceholderText("예상 출력")
     parent.expected_output.setStyleSheet(small_box_style())
 
-    parent.run_testcase_button = QPushButton("현재 테스트케이스 실행")
+    parent.run_testcase_button = QPushButton("현재 입력 실행")
     parent.add_testcase_button = QPushButton("테스트케이스 추가")
+
+    top_button_layout = QHBoxLayout()
+    top_button_layout.addWidget(parent.run_testcase_button)
+    top_button_layout.addWidget(parent.add_testcase_button)
+
+    list_label = QLabel("저장된 테스트케이스")
+    list_label.setStyleSheet("font-weight: bold;")
+
+    parent.testcase_list = QListWidget()
+
+    parent.run_all_testcase_button = QPushButton("전체 실행")
+    parent.delete_testcase_button = QPushButton("선택 삭제")
+    parent.clear_testcase_button = QPushButton("전체 삭제")
+
+    bottom_button_layout = QHBoxLayout()
+    bottom_button_layout.addWidget(parent.run_all_testcase_button)
+    bottom_button_layout.addWidget(parent.delete_testcase_button)
+    bottom_button_layout.addWidget(parent.clear_testcase_button)
 
     layout.addWidget(label)
     layout.addWidget(QLabel("입력"))
     layout.addWidget(parent.testcase_input)
     layout.addWidget(QLabel("예상 출력"))
     layout.addWidget(parent.expected_output)
-    layout.addWidget(parent.run_testcase_button)
-    layout.addWidget(parent.add_testcase_button)
+    layout.addLayout(top_button_layout)
+    layout.addWidget(list_label)
+    layout.addWidget(parent.testcase_list)
+    layout.addLayout(bottom_button_layout)
 
     tab.setLayout(layout)
     return tab

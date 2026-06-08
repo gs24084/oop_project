@@ -47,6 +47,7 @@ from source_code.ui.ui_styles import (
 from source_code.ui.file_controller import FileController
 from source_code.ui.execution_controller import ExecutionController
 from source_code.ui.complexity_controller import ComplexityController
+from source_code.ui.testcase_controller import TestCaseController
 
 
 class MainWindow(QMainWindow):
@@ -65,6 +66,7 @@ class MainWindow(QMainWindow):
         self.file_controller = None
         self.execution_controller = ExecutionController(self.source_code_dir)
         self.complexity_controller = ComplexityController(use_ollama=True)
+        self.testcase_controller = TestCaseController(self.execution_controller)
 
         self.init_ui()
         self.init_controllers()
@@ -233,6 +235,9 @@ class MainWindow(QMainWindow):
 
         self.run_testcase_button.clicked.connect(self.run_current_testcase)
         self.add_testcase_button.clicked.connect(self.add_testcase)
+        self.run_all_testcase_button.clicked.connect(self.run_all_testcases)
+        self.delete_testcase_button.clicked.connect(self.delete_selected_testcase)
+        self.clear_testcase_button.clicked.connect(self.clear_testcases)
 
         self.graph_button.clicked.connect(self.analyze_graph)
         self.complexity_button.clicked.connect(self.analyze_complexity)
@@ -350,46 +355,127 @@ class MainWindow(QMainWindow):
     def clear_console(self):
         self.console_box.reset_console()
 
+    def add_testcase(self):
+        input_text = self.testcase_input.toPlainText()
+        expected_text = self.expected_output.toPlainText()
+
+        if not input_text.strip():
+            QMessageBox.warning(
+                self,
+                "테스트케이스 추가 불가",
+                "테스트 입력이 비어 있습니다."
+            )
+            return
+
+        self.testcase_controller.add_testcase(
+            input_text=input_text,
+            expected_output=expected_text
+        )
+
+        self.testcase_input.clear()
+        self.expected_output.clear()
+
+        self.refresh_testcase_list()
+
+    def refresh_testcase_list(self):
+        self.testcase_list.clear()
+
+        cases = self.testcase_controller.get_testcases()
+
+        for i, case in enumerate(cases):
+            self.testcase_list.addItem(
+                self.testcase_controller.format_case_for_list(i, case)
+            )
+
     def run_current_testcase(self):
         code = self.editor.toPlainText()
         input_text = self.testcase_input.toPlainText()
-        expected = self.expected_output.toPlainText().strip()
+        expected_text = self.expected_output.toPlainText()
 
         if not code.strip():
             QMessageBox.warning(self, "실행 불가", "코드가 비어 있습니다.")
             return
 
+        if not input_text.strip():
+            QMessageBox.warning(
+                self,
+                "테스트케이스 실행 불가",
+                "테스트 입력이 비어 있습니다."
+            )
+            return
+
         self.bottom_tabs.setCurrentIndex(0)
-        self.console_box.append_output("[테스트케이스 실행]\n입력:\n" + input_text.strip())
+
+        temp_controller = TestCaseController(self.execution_controller)
+        temp_controller.add_testcase(
+            input_text=input_text,
+            expected_output=expected_text
+        )
 
         try:
-            result = self.run_current_editor_code(input_text)
-
-            if result.get("type") == "compile":
-                self.console_box.append_output("[Compile Error]\n" + result.get("message", ""))
-                return
-
-            self.append_run_result(result)
-
-            actual = result.get("stdout", "").strip()
-
-            if expected:
-                if actual == expected:
-                    self.append_console("[결과 비교] 정답")
-                else:
-                    self.append_console("[결과 비교] 오답")
-                    self.append_console("[예상 출력]\n" + expected)
-                    self.append_console("[실제 출력]\n" + actual)
+            result = temp_controller.run_single(code, 0)
+            text = temp_controller.format_single_result(result)
+            self.console_box.append_output(text)
 
         except Exception as e:
-            self.append_console("[테스트케이스 실행 오류]\n" + str(e))
+            self.console_box.append_output("[테스트케이스 실행 오류]\n" + str(e))
 
-    def add_testcase(self):
-        QMessageBox.information(
+    def run_all_testcases(self):
+        code = self.editor.toPlainText()
+
+        if not code.strip():
+            QMessageBox.warning(self, "실행 불가", "코드가 비어 있습니다.")
+            return
+
+        if not self.testcase_controller.get_testcases():
+            QMessageBox.information(
+                self,
+                "테스트케이스 없음",
+                "저장된 테스트케이스가 없습니다."
+            )
+            return
+
+        self.bottom_tabs.setCurrentIndex(0)
+
+        try:
+            results = self.testcase_controller.run_all(code)
+            text = self.testcase_controller.format_all_results(results)
+
+            self.console_box.append_output(text)
+            self.refresh_testcase_list()
+
+        except Exception as e:
+            self.console_box.append_output("[전체 테스트케이스 실행 오류]\n" + str(e))
+
+    def delete_selected_testcase(self):
+        index = self.testcase_list.currentRow()
+
+        if index < 0:
+            QMessageBox.information(
+                self,
+                "선택 없음",
+                "삭제할 테스트케이스를 선택하세요."
+            )
+            return
+
+        self.testcase_controller.delete_testcase(index)
+        self.refresh_testcase_list()
+
+    def clear_testcases(self):
+        if not self.testcase_controller.get_testcases():
+            return
+
+        answer = QMessageBox.question(
             self,
-            "테스트케이스 추가",
-            "테스트케이스 저장 기능은 추후 연결할 예정입니다."
+            "전체 삭제",
+            "저장된 테스트케이스를 모두 삭제할까요?"
         )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.testcase_controller.clear_testcases()
+        self.refresh_testcase_list()
 
     def analyze_graph(self):
         text = self.graph_input.toPlainText().strip()
