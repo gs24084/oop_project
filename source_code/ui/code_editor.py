@@ -94,13 +94,10 @@ class CppHighlighter(QSyntaxHighlighter):
             if not value:
                 continue
 
-            length = len(value)
-
             if index >= len(text):
                 break
 
-            length = min(length, len(text) - index)
-
+            length = min(len(value), len(text) - index)
             text_format = self.get_format_for_token(token_type)
 
             if text_format is not None:
@@ -164,6 +161,22 @@ class CodeEditor(QPlainTextEdit):
         self.tab_spaces = tab_spaces
         self.line_number_area = LineNumberArea(self)
         self.highlighter = CppHighlighter(self.document())
+
+        self.open_to_close = {
+            "(": ")",
+            "[": "]",
+            "{": "}",
+            '"': '"',
+            "'": "'",
+        }
+
+        self.close_chars = {
+            ")",
+            "]",
+            "}",
+            '"',
+            "'",
+        }
 
         self.update_tab_width()
 
@@ -271,15 +284,157 @@ class CodeEditor(QPlainTextEdit):
         self.setExtraSelections(selections)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Tab:
+        key = event.key()
+        text = event.text()
+
+        if key == Qt.Key.Key_Tab:
             self.insertPlainText(" " * self.tab_spaces)
             return
 
-        if event.key() == Qt.Key.Key_Backtab:
+        if key == Qt.Key.Key_Backtab:
             self.remove_indent()
             return
 
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.handle_enter()
+            return
+
+        if key == Qt.Key.Key_Backspace:
+            if self.remove_empty_pair():
+                return
+
+            super().keyPressEvent(event)
+            return
+
+        if text in self.open_to_close:
+            self.insert_pair(text)
+            return
+
+        if text in self.close_chars:
+            if self.skip_existing_close_char(text):
+                return
+
         super().keyPressEvent(event)
+
+    def handle_enter(self):
+        cursor = self.textCursor()
+        block_text = cursor.block().text()
+        position_in_block = cursor.positionInBlock()
+
+        before_cursor = block_text[:position_in_block]
+        after_cursor = block_text[position_in_block:]
+
+        current_indent = self.get_line_indent(block_text)
+        next_indent = current_indent
+
+        stripped_before = before_cursor.rstrip()
+        stripped_after = after_cursor.lstrip()
+
+        if stripped_before.endswith("{"):
+            next_indent += " " * self.tab_spaces
+
+        if stripped_before.endswith("{") and stripped_after.startswith("}"):
+            insert_text = "\n" + next_indent + "\n" + current_indent
+            cursor.insertText(insert_text)
+
+            new_position = cursor.position() - (len(current_indent) + 1)
+            cursor.setPosition(new_position)
+            self.setTextCursor(cursor)
+            return
+
+        cursor.insertText("\n" + next_indent)
+        self.setTextCursor(cursor)
+
+    def get_line_indent(self, line_text):
+        indent = []
+
+        for ch in line_text:
+            if ch == " ":
+                indent.append(ch)
+            elif ch == "\t":
+                indent.append(" " * self.tab_spaces)
+            else:
+                break
+
+        return "".join(indent)
+
+    def insert_pair(self, open_char):
+        close_char = self.open_to_close[open_char]
+        cursor = self.textCursor()
+
+        if cursor.hasSelection():
+            selected_text = cursor.selectedText()
+            cursor.insertText(open_char + selected_text + close_char)
+            self.setTextCursor(cursor)
+            return
+
+        cursor.insertText(open_char + close_char)
+        cursor.movePosition(QTextCursor.MoveOperation.Left)
+        self.setTextCursor(cursor)
+
+    def skip_existing_close_char(self, close_char):
+        cursor = self.textCursor()
+        next_char = self.get_next_char(cursor)
+
+        if next_char == close_char:
+            cursor.movePosition(QTextCursor.MoveOperation.Right)
+            self.setTextCursor(cursor)
+            return True
+
+        return False
+
+    def remove_empty_pair(self):
+        cursor = self.textCursor()
+
+        if cursor.hasSelection():
+            return False
+
+        prev_char = self.get_previous_char(cursor)
+        next_char = self.get_next_char(cursor)
+
+        if not prev_char or not next_char:
+            return False
+
+        if self.open_to_close.get(prev_char) != next_char:
+            return False
+
+        cursor.beginEditBlock()
+        cursor.movePosition(QTextCursor.MoveOperation.Left)
+        cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor,
+            2
+        )
+        cursor.removeSelectedText()
+        cursor.endEditBlock()
+
+        self.setTextCursor(cursor)
+        return True
+
+    def get_previous_char(self, cursor):
+        if cursor.position() <= 0:
+            return ""
+
+        temp_cursor = QTextCursor(cursor)
+        temp_cursor.movePosition(QTextCursor.MoveOperation.Left)
+        temp_cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor
+        )
+
+        return temp_cursor.selectedText()
+
+    def get_next_char(self, cursor):
+        if cursor.position() >= len(self.toPlainText()):
+            return ""
+
+        temp_cursor = QTextCursor(cursor)
+        temp_cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor
+        )
+
+        return temp_cursor.selectedText()
 
     def remove_indent(self):
         cursor = self.textCursor()
