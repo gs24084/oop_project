@@ -8,7 +8,7 @@ int main(){
     int n;
     cin >> n;
 
-    cout << n*n*n*n << "\n";
-    //asdfadsfkjhasdfh
+    cout << n<< "\n";
+
     return 0;
 }
