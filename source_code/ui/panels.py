@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
     QCheckBox,
+    QScrollArea,
 )
 
 from PySide6.QtCore import Qt
@@ -22,9 +23,29 @@ from PySide6.QtCore import Qt
 from source_code.ui.ui_styles import small_box_style
 
 
+def make_scroll_area(content_widget):
+    scroll_area = QScrollArea()
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+    scroll_area.setWidget(content_widget)
+
+    scroll_area.setMinimumHeight(0)
+    scroll_area.setStyleSheet(
+        """
+        QScrollArea {
+            background: transparent;
+            border: none;
+        }
+        """
+    )
+
+    return scroll_area
+
+
 def create_testcase_tab(parent):
-    tab = QWidget()
+    content = QWidget()
     layout = QVBoxLayout()
+    layout.setContentsMargins(6, 6, 6, 6)
 
     label = QLabel("테스트케이스 관리")
     label.setStyleSheet("font-weight: bold;")
@@ -32,10 +53,12 @@ def create_testcase_tab(parent):
     parent.testcase_input = QTextEdit()
     parent.testcase_input.setPlaceholderText("테스트 입력")
     parent.testcase_input.setStyleSheet(small_box_style())
+    parent.testcase_input.setMinimumHeight(80)
 
     parent.expected_output = QTextEdit()
     parent.expected_output.setPlaceholderText("예상 출력")
     parent.expected_output.setStyleSheet(small_box_style())
+    parent.expected_output.setMinimumHeight(80)
 
     parent.run_testcase_button = QPushButton("현재 입력 실행")
     parent.add_testcase_button = QPushButton("테스트케이스 추가")
@@ -48,6 +71,7 @@ def create_testcase_tab(parent):
     list_label.setStyleSheet("font-weight: bold;")
 
     parent.testcase_list = QListWidget()
+    parent.testcase_list.setMinimumHeight(100)
 
     parent.run_all_testcase_button = QPushButton("전체 실행")
     parent.delete_testcase_button = QPushButton("선택 삭제")
@@ -67,14 +91,16 @@ def create_testcase_tab(parent):
     layout.addWidget(list_label)
     layout.addWidget(parent.testcase_list)
     layout.addLayout(bottom_button_layout)
+    layout.addStretch()
 
-    tab.setLayout(layout)
-    return tab
+    content.setLayout(layout)
+    return make_scroll_area(content)
 
 
 def create_graph_tab(parent):
-    tab = QWidget()
+    content = QWidget()
     layout = QVBoxLayout()
+    layout.setContentsMargins(6, 6, 6, 6)
 
     label = QLabel("그래프 시각화")
     label.setStyleSheet("font-weight: bold;")
@@ -97,6 +123,7 @@ def create_graph_tab(parent):
         "1 8"
     )
     parent.graph_input.setStyleSheet(small_box_style())
+    parent.graph_input.setMinimumHeight(120)
 
     option_layout = QHBoxLayout()
 
@@ -119,6 +146,7 @@ def create_graph_tab(parent):
     parent.graph_result.setReadOnly(True)
     parent.graph_result.setPlaceholderText("그래프 정보 또는 오류 메시지가 표시됩니다.")
     parent.graph_result.setStyleSheet(small_box_style())
+    parent.graph_result.setMinimumHeight(130)
 
     parent.graph_image_label = QLabel("그래프 이미지가 여기에 표시됩니다.")
     parent.graph_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -149,14 +177,16 @@ def create_graph_tab(parent):
 
     layout.addWidget(QLabel("그래프 이미지"))
     layout.addWidget(parent.graph_image_label)
+    layout.addStretch()
 
-    tab.setLayout(layout)
-    return tab
+    content.setLayout(layout)
+    return make_scroll_area(content)
 
 
 def create_complexity_tab(parent):
-    tab = QWidget()
+    content = QWidget()
     layout = QVBoxLayout()
+    layout.setContentsMargins(6, 6, 6, 6)
 
     label = QLabel("시간복잡도 분석")
     label.setStyleSheet("font-weight: bold;")
@@ -165,20 +195,23 @@ def create_complexity_tab(parent):
     parent.complexity_result.setReadOnly(True)
     parent.complexity_result.setPlaceholderText("코드 분석 결과")
     parent.complexity_result.setStyleSheet(small_box_style())
+    parent.complexity_result.setMinimumHeight(320)
 
     parent.complexity_button = QPushButton("복잡도 분석")
 
     layout.addWidget(label)
     layout.addWidget(parent.complexity_button)
     layout.addWidget(parent.complexity_result)
+    layout.addStretch()
 
-    tab.setLayout(layout)
-    return tab
+    content.setLayout(layout)
+    return make_scroll_area(content)
 
 
 def create_template_tab(parent):
-    tab = QWidget()
+    content = QWidget()
     layout = QVBoxLayout()
+    layout.setContentsMargins(6, 6, 6, 6)
 
     label = QLabel("템플릿")
     label.setStyleSheet("font-weight: bold;")
@@ -195,5 +228,5 @@ def create_template_tab(parent):
     layout.addWidget(parent.clear_console_button)
     layout.addStretch()
 
-    tab.setLayout(layout)
-    return tab
+    content.setLayout(layout)
+    return make_scroll_area(content)
