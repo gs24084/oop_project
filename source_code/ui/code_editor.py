@@ -27,13 +27,22 @@ class CodeEditor(QPlainTextEdit):
 
     def remove_indent(self):
         cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.StartOfLine, QTextCursor.KeepAnchor)
 
-        line_text = cursor.selectedText()
+        if cursor.hasSelection():
+            self.remove_indent_from_selection()
+            return
 
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+        cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor,
+            self.tab_spaces
+        )
+
+        selected = cursor.selectedText()
         remove_count = 0
 
-        for ch in line_text[:self.tab_spaces]:
+        for ch in selected:
             if ch == " ":
                 remove_count += 1
             else:
@@ -43,10 +52,54 @@ class CodeEditor(QPlainTextEdit):
             return
 
         cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.StartOfLine)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
 
-        for _ in range(remove_count):
-            cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+        cursor.movePosition(
+            QTextCursor.MoveOperation.Right,
+            QTextCursor.MoveMode.KeepAnchor,
+            remove_count
+        )
 
         cursor.removeSelectedText()
         self.setTextCursor(cursor)
+
+    def remove_indent_from_selection(self):
+        cursor = self.textCursor()
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+
+        cursor.setPosition(start)
+        start_block = cursor.blockNumber()
+
+        cursor.setPosition(end)
+        end_block = cursor.blockNumber()
+
+        cursor.beginEditBlock()
+
+        for block_number in range(start_block, end_block + 1):
+            block = self.document().findBlockByNumber(block_number)
+
+            if not block.isValid():
+                continue
+
+            text = block.text()
+            remove_count = 0
+
+            for ch in text[:self.tab_spaces]:
+                if ch == " ":
+                    remove_count += 1
+                else:
+                    break
+
+            if remove_count == 0:
+                continue
+
+            cursor.setPosition(block.position())
+            cursor.movePosition(
+                QTextCursor.MoveOperation.Right,
+                QTextCursor.MoveMode.KeepAnchor,
+                remove_count
+            )
+            cursor.removeSelectedText()
+
+        cursor.endEditBlock()
