@@ -92,7 +92,7 @@ class MainWindow(QMainWindow):
 
         self.terminal_box = QTextEdit()
         self.terminal_box.setReadOnly(True)
-        self.terminal_box.setPlaceholderText("Build, Debug, 컴파일 메시지가 표시됩니다.")
+        self.terminal_box.setPlaceholderText("Build, 컴파일 메시지가 표시됩니다.")
         self.terminal_box.setStyleSheet(console_style())
 
         upper_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -136,7 +136,6 @@ class MainWindow(QMainWindow):
 
         self.run_button = QPushButton("실행")
         self.build_button = QPushButton("Build")
-        self.debug_button = QPushButton("Debug")
 
         toolbar.addWidget(self.new_button)
         toolbar.addWidget(self.open_button)
@@ -148,7 +147,6 @@ class MainWindow(QMainWindow):
 
         toolbar.addWidget(self.run_button)
         toolbar.addWidget(self.build_button)
-        toolbar.addWidget(self.debug_button)
 
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
 
@@ -230,7 +228,6 @@ class MainWindow(QMainWindow):
 
         self.run_button.clicked.connect(self.run_code_from_console)
         self.build_button.clicked.connect(self.build_code)
-        self.debug_button.clicked.connect(self.debug_code)
 
         self.console_box.run_callback = self.run_code_from_console
 
@@ -282,34 +279,6 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self.terminal_box.setPlainText("[Build Error]\n\n" + str(e))
-
-    def debug_code(self):
-        self.bottom_tabs.setCurrentIndex(1)
-        self.terminal_box.clear()
-
-        code = self.editor.toPlainText()
-        input_text = self.console_box.get_current_input()
-
-        if not code.strip():
-            self.terminal_box.setPlainText("[Debug Failed]\n\n코드가 비어 있습니다.")
-            return
-
-        try:
-            result = self.execution_controller.run_code(
-                code=code,
-                input_text=input_text,
-                timeout=2
-            )
-
-            text = self.execution_controller.format_debug_result(
-                result=result,
-                input_text=input_text
-            )
-
-            self.terminal_box.setPlainText(text)
-
-        except Exception as e:
-            self.terminal_box.setPlainText("[Debug Error]\n\n" + str(e))
 
     def run_code_from_console(self):
         code = self.editor.toPlainText()
