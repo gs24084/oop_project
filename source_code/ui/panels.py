@@ -110,7 +110,7 @@ def create_graph_tab(parent):
         "- 간선 가중치 없음: u v\n"
         "- 간선 가중치 있음: u v w\n\n"
         "정점 가중치 입력 형식\n"
-        "- 정점 가중치"
+        "1 a \n 2 b \n 3 c \n 4 d \n 5 e \n ..."
     )
     description.setWordWrap(True)
 

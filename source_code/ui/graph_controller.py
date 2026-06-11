@@ -115,7 +115,6 @@ class GraphController:
             if len(parts) != 2:
                 raise ValueError(
                     f"{line_number}번째 정점 가중치 형식이 잘못되었습니다.\n"
-                    "정점 가중치 입력 형식은 '정점 가중치' 입니다.\n"
                     f"문제 줄: {line}"
                 )
 
