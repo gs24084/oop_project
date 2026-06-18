@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 import os
 import shutil
-
+#코드 실행 담당 클래스. gcc 컴파일러를 사용해 cpp 파일을 실행하고 출력값/리턴값 반환 가능.
 class ExecutionManager:
     def __init__(self, compiler="g++"):
         self.compiler = compiler

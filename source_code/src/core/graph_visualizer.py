@@ -1,7 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 
-
+#그래프 시각화 클래스. networkx로 그래프를 구성하고, matplotlib으로 시각화 해서 그림 파일의 형태로 반환 가능.
 class GraphVisualizer:
 
     def parse_edges(

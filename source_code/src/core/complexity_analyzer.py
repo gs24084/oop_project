@@ -3,7 +3,7 @@ import requests
 
 
 class ComplexityAnalyzer:
-
+#시간복잡도 분석 클래스, ollama 로컬 llm 모델을 이용해서 시간복잡도 분석.
     def __init__(
         self,
         use_ollama=True,
