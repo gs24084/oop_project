@@ -1,3 +1,5 @@
+
+# 테스트케이스 관리 기능을 담당하는 클래스. 테스트케이스 추가, 삭제, 실행 및 예상 출력과 실제 출력 비교 등을 하고 결과를 사용자에게 보여준다.
 class TestCaseController:
     def __init__(self, execution_controller):
         self.execution_controller = execution_controller

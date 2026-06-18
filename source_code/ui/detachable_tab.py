@@ -19,7 +19,7 @@ from PySide6.QtGui import QCursor
 
 from source_code.ui.ui_styles import floating_header_style, floating_container_style
 
-
+# 분리된 탭을 독립적인 창으로 표시하는 클래스. 사용자가 탭을 분리, 복귀시키는 역할을 한다.
 class FloatingTabWindow(QDialog):
     def __init__(self, source_tab_widget, content_widget, title, original_index, parent_window):
         super().__init__(parent_window)
@@ -140,7 +140,7 @@ class FloatingTabWindow(QDialog):
 
         event.accept()
 
-
+# 테스트케이스, 그래프, 복잡도 분석 등 도구 탭을 관리하는 클래스. 각 탭을 메인 창에서 분리하거나 다시 붙이는 기능을 제공한다.
 class DetachableTabWidget(QTabWidget):
     def __init__(self, parent_window):
         super().__init__()

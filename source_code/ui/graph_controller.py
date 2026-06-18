@@ -26,6 +26,7 @@ except Exception as e:
             )
 
 
+# 그래프 시각화 탭의 입력과 출력을 관리하는 클래스. 사용자가 입력한 정점, 간선, 가중치 정보를 검증하고 GraphVisualizer에 그래프 시각화를 요청한다.
 class GraphController:
     def __init__(self, source_code_dir: Path):
         self.source_code_dir = source_code_dir

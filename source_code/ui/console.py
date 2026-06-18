@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QTextEdit
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor
 
-
+# 프로그램 실행에 필요한 입력을 받고 실행 결과를 출력하는 콘솔 UI 클래스. 사용자 입력, 표준 출력, 오류 메시지 등을 하단 콘솔 영역에 표시한다.
 class ConsoleBox(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)

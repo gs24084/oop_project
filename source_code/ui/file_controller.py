@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from source_code.ui.cpp_templates import default_cpp_code
 
-
+# 파일 관련 동작을 제어하는 클래스. 새 파일 생성, C++ 파일 열기, 저장, 기본 코드 불러오기 등 코드 에디터와 연결된 파일 입출력 기능을 처리한다.
 class FileController:
     def __init__(self, parent, editor, default_cpp_path: Path):
         self.parent = parent

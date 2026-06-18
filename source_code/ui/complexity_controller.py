@@ -30,6 +30,7 @@ except Exception as e:
             }
 
 
+# 시간복잡도 분석 기능의 UI 작동을 담당하는 클래스. 사용자가 분석 버튼을 누르면 현재 코드를 ComplexityAnalyzer에 전달하고, 분석 결과를 UI에 출력한다.
 class ComplexityController:
     def __init__(self, use_ollama=True):
         self.use_ollama = use_ollama
