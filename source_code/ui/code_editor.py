@@ -28,7 +28,7 @@ try:
 except Exception:
     PYGMENTS_AVAILABLE = False
 
-
+# C++ 코드의 문법 하이라이팅. 키워드, 문자열, 주석, 숫자 등을 구분하여 표시함으로써 코드의 가독성을 높인다.
 class CppHighlighter(QSyntaxHighlighter):
     def __init__(self, document):
         super().__init__(document)
@@ -153,7 +153,7 @@ class LineNumberArea(QWidget):
     def paintEvent(self, event):
         self.editor.line_number_area_paint_event(event)
 
-
+# C++ 코드를 작성하는 편집기 영역 제공. 줄 번호 표시, 현재 줄 강조, 자동 들여쓰기, 괄호 자동 완성 등 코드 작성에 필요한 기본 편집 기능을 처리한다.
 class CodeEditor(QPlainTextEdit):
     def __init__(self, parent=None, tab_spaces=4):
         super().__init__(parent)

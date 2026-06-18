@@ -12,6 +12,7 @@ try:
 except Exception as e:
     IMPORT_ERROR_MESSAGE = str(e)
 
+    # execution_manager.py에서 정의한 class 미작동 시 대체 클래스.
     class ExecutionManager:
         def __init__(self, compiler="g++"):
             self.compiler = compiler
@@ -30,7 +31,7 @@ except Exception as e:
                 "execution_time": 0.0
             }
 
-
+# UI와 실행 엔진 사이를 연결하는 클래스. 에디터의 코드를 임시 C++ 파일로 저장한 뒤 ExecutionManager에 실행을 요청하고, 컴파일 및 실행 결과를 콘솔에 표시하기 적절한 형태로 정리한다.
 class ExecutionController:
     def __init__(self, source_code_dir: Path):
         self.source_code_dir = source_code_dir
